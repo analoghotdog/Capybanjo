@@ -45,8 +45,11 @@ test('two close detections each match the nearest expected note', () => {
 
 test('near-swapped detections resolve to the nearest non-crossing pairing', () => {
   // e0=0, e1=50ms; d0=40ms, d1=60ms. Crossing (e0-d1, e1-d0) costs 70ms,
-  // in-order pairing costs 50ms and must win.
-  const { matches, missed, extra } = alignOnsets([0.04, 0.06], [0, 0.05]);
+  // in-order pairing costs 50ms and must win. The tolerance is pinned
+  // explicitly: this test is about crossing resolution, and the tempo-aware
+  // default would reject the 40ms deviation at 50ms spacing (tolerance policy
+  // is covered in tests/tolerance.test.mjs).
+  const { matches, missed, extra } = alignOnsets([0.04, 0.06], [0, 0.05], { toleranceMs: 250 });
   assert.deepEqual(matches.map((m) => m.expectedIndex), [0, 1]);
   assert.deepEqual(matches.map((m) => m.detectedIndex), [0, 1]);
   approx(matches[0].deviationMs, 40);

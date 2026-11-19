@@ -20,7 +20,9 @@ record. Nothing in Part E (out of scope) was built.
 - PROGRESS.md contains one entry per step as required, written at the end of
   the run rather than after each step. Git history contains one commit
   (`Steps 1-53: full build`) instead of 53 step commits, because the steps were
-  not separable in time. Per-step authorship is recorded in PROGRESS.md.
+  not separable in time. Per-step authorship is recorded in PROGRESS.md. The
+  post-testing fix plan (fix steps F1-F9) then added one commit per fix step;
+  the pre-fix state is tagged `v0-untested`.
 - Step-ordering inside a pass followed the dependency graph (pure modules and
   tests first, then the browser layers), not the numeric order of Part D.
   Every "Done when" condition was still checked (automated where testable,
@@ -109,9 +111,12 @@ step's checks are listed in PROGRESS.md):
 
 ## 6. Verification status at hand-off
 
-- `node --test tests/*.test.mjs` — see PROGRESS.md final entry for the count.
+- `node --test tests/*.test.mjs` — 132 tests, all pass (after the F1-F9 fix
+  pass; the per-step breakdown is in PROGRESS.md "Verification type per step").
 - `node --experimental-vm-modules scripts/check-syntax.mjs` — all sources parse.
-- Manual checks needing a real browser/microphone/instrument are listed in
-  README.md ("Manual test checklist") and in the OWNER CHECK entries of
-  PROGRESS.md. Nothing in that list has been run by the agent; it requires the
-  owner's device, ears and banjo.
+- `node scripts/check-precache.mjs` — service worker precache complete.
+- Steps verified only by parse checks or never-run manual checklist items are
+  marked `DONE (unverified in browser)` in PROGRESS.md and listed as
+  needs-browser / needs-microphone in the verification table. Nothing in the
+  manual checklist has been run by the agent; it requires the owner's device,
+  ears and banjo.

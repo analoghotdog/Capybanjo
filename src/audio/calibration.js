@@ -1,13 +1,14 @@
-// Calibration: measure the input/output latency offset and jitter so timing
-// scores can be corrected. See build plan C5 and Step 22.
-// Pure statistics plus store-key helpers; the Calibrate view orchestrates the
+// Calibration: measure system latency (acoustic loopback) and the player's
+// habitual play-along offset separately, so timing scores can be corrected for
+// the audio path without hiding the player's own lead or lag.
+// Pure statistics plus store-key helpers; the Calibrate UI orchestrates the
 // click playback and recording.
 
 /**
- * Match user onsets to scheduled clicks and compute the mean offset and jitter.
- * @param {number[]} clickTimes seconds (AudioContext clock)
- * @param {number[]} onsetTimes seconds (recording clock, same time base when
- *   the recording is captured in the same context)
+ * Generic measurement: match detected onsets to scheduled clicks and compute
+ * the mean offset and jitter.
+ * @param {number[]} clickTimes seconds (AudioContext clock, recording base)
+ * @param {number[]} onsetTimes seconds (same time base)
  * @returns {{ offsetMs: number, jitterMs: number, matched: number, pairs: object[] }}
  *   offsetMs: mean(onset - click) in ms (late positive).
  *   jitterMs: standard deviation of the matched offsets (sample sd).
@@ -44,14 +45,56 @@ export function computeCalibration(clickTimes, onsetTimes, toleranceMs = 400) {
   };
 }
 
+/**
+ * Acoustic loopback (fix plan F7, option 2/3): the microphone hears the
+ * clicks themselves (speakers, or headphones held against the mic). The
+ * measured offset is the true system input+output latency, with no playing
+ * involved. This is the figure subtracted in scoring.
+ */
+export function computeSystemCalibration(clickTimes, onsetTimes, toleranceMs = 400) {
+  const r = computeCalibration(clickTimes, onsetTimes, toleranceMs);
+  return {
+    systemOffsetMs: r.offsetMs,
+    systemJitterMs: r.jitterMs,
+    matched: r.matched,
+    pairs: r.pairs,
+  };
+}
+
+/**
+ * Play-along habit (fix plan F7): the user plays along with the clicks; the
+ * residual after removing the system latency is the player's own habitual
+ * lead (negative) or lag (positive). Reported informationally, never
+ * subtracted in scoring.
+ */
+export function computePlayerHabit(clickTimes, onsetTimes, systemOffsetMs = 0, toleranceMs = 400) {
+  const r = computeCalibration(clickTimes, onsetTimes, toleranceMs);
+  return {
+    playerOffsetMs: r.offsetMs - systemOffsetMs,
+    playerJitterMs: r.jitterMs,
+    playAlongOffsetMs: r.offsetMs,
+    matched: r.matched,
+    pairs: r.pairs,
+  };
+}
+
 /** Stable store id for a device pair (input + output). */
 export function calibrationKey(inputId, outputId) {
   return `cal:${inputId || 'default'}|${outputId || 'default'}`;
 }
 
-/** Human-readable warning when jitter is too high (build plan C5: ~10 ms). */
-export function jitterWarning(jitterMs, thresholdMs = 10) {
+/**
+ * Human-readable warning when jitter is too high (build plan C5: ~10 ms).
+ * `measurement` names which figure the warning refers to (system or player).
+ */
+export function jitterWarning(jitterMs, thresholdMs = 10, measurement = 'this measurement') {
   if (jitterMs <= thresholdMs) return null;
-  return `Timing jitter is ${Math.round(jitterMs)} ms, above ${thresholdMs} ms. ` +
+  return `Timing jitter in ${measurement} is ${Math.round(jitterMs)} ms, above ${thresholdMs} ms. ` +
     'Wired headphones and a quieter machine usually help.';
+}
+
+/** Offset subtracted in scoring: the system latency only. */
+export function scoringOffsetMs(calibration) {
+  if (!calibration) return 0;
+  return calibration.systemOffsetMs ?? calibration.offsetMs ?? 0;
 }

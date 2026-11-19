@@ -162,6 +162,8 @@ function showUpdateBanner(registration) {
   updateBanner.hidden = false;
   const btn = document.getElementById('banner-update-reload');
   btn.onclick = () => {
+    // The user asked for the update: allow the controller change to reload.
+    reloadRequested = true;
     if (registration && registration.waiting) {
       registration.waiting.postMessage({ type: 'SKIP_WAITING' });
     } else {
@@ -169,6 +171,9 @@ function showUpdateBanner(registration) {
     }
   };
 }
+
+// Never reload automatically: an update must not interrupt a recording.
+let reloadRequested = false;
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -185,7 +190,7 @@ if ('serviceWorker' in navigator) {
 
     let refreshed = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (refreshed) return;
+      if (refreshed || !reloadRequested) return;
       refreshed = true;
       location.reload();
     });

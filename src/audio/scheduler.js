@@ -66,12 +66,18 @@ export function createScheduler(options = {}) {
     }
   }
 
-  function start() {
+  /**
+   * Start scheduling. `firstTickDelaySec` (optional) sets the delay from now
+   * to the first scheduled tick; callers that must capture the first tick in a
+   * recording use it to place the first click after the measured recording
+   * origin. Defaults to `startDelay` from the options.
+   */
+  function start(firstTickDelaySec) {
     if (running) return;
     running = true;
     tick = 0;
     pending = null;
-    nextTime = clock.now() + startDelay;
+    nextTime = clock.now() + (firstTickDelaySec != null ? firstTickDelaySec : startDelay);
     pump();
     if (useTimer) timer = setInterval(pump, intervalMs);
   }

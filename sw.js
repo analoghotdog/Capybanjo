@@ -20,6 +20,7 @@ const PRECACHE = [
   'src/audio/onset.js',
   'src/audio/pitch.js',
   'src/audio/player.js',
+  'src/audio/recorder-core.js',
   'src/audio/recorder-worklet.js',
   'src/audio/scheduler.js',
   'src/audio/synth.js',
@@ -50,9 +51,12 @@ const PRECACHE = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE)
-      .then((cache) => cache.addAll(PRECACHE))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE).then((cache) =>
+      // cache: 'reload' bypasses the browser HTTP cache so a stale copy can
+      // never populate the new version's cache. The worker stays waiting after
+      // install; it only activates when the user presses the update banner.
+      cache.addAll(PRECACHE.map((url) => new Request(url, { cache: 'reload' })))
+    )
   );
 });
 
@@ -83,7 +87,12 @@ self.addEventListener('fetch', (event) => {
           caches.open(CACHE).then((cache) => cache.put(event.request, copy));
         }
         return response;
-      }).catch(() => caches.match('index.html'));
+      }).catch((err) => {
+        // Only navigation requests fall back to the app shell. Anything else
+        // (e.g. ES modules) must fail normally instead of receiving HTML.
+        if (event.request.mode === 'navigate') return caches.match('index.html');
+        throw err;
+      });
     })
   );
 });

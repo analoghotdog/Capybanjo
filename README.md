@@ -53,6 +53,21 @@ python -m http.server 8000
 
 Open `http://localhost:8000/` in current Chrome or Edge on Windows desktop.
 
+## Deploying to GitHub Pages
+
+1. Create a GitHub repository and push this folder's contents to it.
+2. In the repository settings, enable GitHub Pages from the branch root
+   (project site). The app uses only relative paths, so it works under
+   `https://<user>.github.io/<repo-name>/`.
+3. Open the Pages URL. Chrome's install option appears once the service worker
+   has installed. Install it, then disconnect the network and reload: the app
+   must still work.
+
+Do not commit personal data: recordings, practice logs, calibrations, backup
+files, or copyrighted tab. All of that stays in the browser (IndexedDB). The
+only tab data in the repository is the roll library, which is original
+pattern data.
+
 ## Bumping the cache version
 
 When you change any file, update the cache name in `sw.js`:
@@ -88,6 +103,7 @@ scoring, alignment, speed trainer, backup round-trip) are tested in Node 22:
 ```
 node --test tests/*.test.mjs
 node --experimental-vm-modules scripts/check-syntax.mjs   # parse-check all sources
+node scripts/check-precache.mjs                           # sw.js precache completeness
 node scripts/gen-icons.mjs                                # regenerate icons
 ```
 

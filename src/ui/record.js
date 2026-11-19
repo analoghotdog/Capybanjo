@@ -5,11 +5,12 @@
 
 import { el, numberInput, select, slider } from './dom.js';
 import {
-  listInputDevices, startCapture, stopCapture, createLevelMeter, createRecorder,
+  listInputDevices, startCapture, stopCapture, createLevelMeter, recordingOrigin,
   encodeWav, decodeWav,
 } from '../audio/capture.js';
+import { toRecordingBase, shouldStopNow } from '../audio/recorder-core.js';
 import { detectOnsets } from '../audio/onset.js';
-import { computeCalibration, calibrationKey, jitterWarning } from '../audio/calibration.js';
+import { computeSystemCalibration, computePlayerHabit, calibrationKey, jitterWarning, scoringOffsetMs } from '../audio/calibration.js';
 import { scoreGrid, rollEvenness, summarizeTiming } from '../features/timing-report.js';
 import { alignOnsets } from '../features/alignment.js';
 import { loadRolls } from '../tab/library.js';
@@ -24,7 +25,7 @@ export function mountRecord(container, app) {
   let meterRaf = 0;
   let recorder = null;
   let running = false;
-  let runState = null; // { gridTimes, recStart, totalTicks, tickCount, unsub, expectedNotes }
+  let runState = null; // { gridTimes, recStart, firstTickTime, unsub, expectedNotes, bpm }
   let lastTake = null; // { samples, sampleRate, report, mode }
   let onsetOptions = { sensitivity: 1.5, minIntervalMs: 60 };
   let cleanThresholdMs = 20;
@@ -89,29 +90,84 @@ export function mountRecord(container, app) {
   }
 
   // ---------- calibration ----------
+  // Fix plan F7: system latency and the player's habitual offset are measured
+  // separately. Option 2 (acoustic loopback) is the default until the owner
+  // reports which option they prefer.
+  let calMethod = 'loopback'; // 'playalong' | 'loopback' | 'both'
+  const calMethodSelect = select([
+    ['playalong', '1. Play-along only (bias figures are relative to your calibration)'],
+    ['loopback', '2. Acoustic loopback (measures system latency; optional play-along check)'],
+    ['both', '3. Both (loopback offset stored, play-along informational)'],
+  ], calMethod, (v) => { calMethod = v; }, 'Calibration method');
+
   const calBtn = el('button', {
     type: 'button', text: 'Calibrate',
     onClick: async () => {
       if (!stream) { calStatus.textContent = 'Enable the microphone first.'; return; }
-      calStatus.textContent = 'Playing 16 clicks; play along over headphones...';
-      await runCalibration();
+      if (calMethod === 'playalong') {
+        calStatus.textContent = 'Playing 16 clicks; play along over headphones...';
+        await runPlayAlong({ informational: false });
+      } else {
+        calStatus.textContent = 'Playing 16 clicks through the output. Do not play: the microphone should hear only the clicks (speakers, or headphones held against the microphone)...';
+        await runLoopback();
+        if (calMethod === 'both') {
+          calStatus.textContent = 'Now playing 16 more clicks: play along (this figure is informational)...';
+          await runPlayAlong({ informational: true });
+        }
+      }
     },
   });
+
+  const playAlongBtn = el('button', {
+    type: 'button', class: 'secondary', text: 'Play-along check',
+    onClick: async () => {
+      if (!stream) { calStatus.textContent = 'Enable the microphone first.'; return; }
+      calStatus.textContent = 'Playing 16 clicks; play along over headphones (this reports your habitual offset)...';
+      await runPlayAlong({ informational: calMethod !== 'playalong' });
+    },
+  });
+
   const calStatus = el('p', { class: 'muted small', text: 'No calibration for this device pair yet.' });
+
+  function describeCalibration() {
+    if (!calibration) return 'No calibration for this device pair yet.';
+    const parts = [];
+    if (calibration.method === 'playalong' && calibration.playerOffsetMs == null) {
+      parts.push(`Play-along offset ${Math.round(calibration.systemOffsetMs)} ms, jitter ${Math.round(calibration.systemJitterMs ?? 0)} ms. Bias figures are relative to your calibration.`);
+    } else {
+      parts.push(`System offset ${Math.round(calibration.systemOffsetMs)} ms, system jitter ${Math.round(calibration.systemJitterMs ?? 0)} ms.`);
+    }
+    if (calibration.playerOffsetMs != null) {
+      parts.push(`Your habitual offset ${Math.round(calibration.playerOffsetMs)} ms (positive = late). Informational only.`);
+    }
+    return parts.join(' ');
+  }
 
   async function loadCalibration() {
     const db = await app.getDb();
     const key = calibrationKey(deviceSelect.value, 'default');
     calibration = await db.get('calibrations', key);
-    if (calibration) {
-      calStatus.textContent = `Saved calibration: offset ${Math.round(calibration.offsetMs)} ms, jitter ${Math.round(calibration.jitterMs)} ms.`;
-    }
+    calStatus.textContent = describeCalibration();
   }
 
-  async function runCalibration() {
+  async function saveCalibration(fields) {
+    calibration = {
+      id: calibrationKey(deviceSelect.value, 'default'),
+      inputId: deviceSelect.value || 'default',
+      outputId: 'default',
+      ...(calibration || {}),
+      ...fields,
+      at: new Date().toISOString(),
+    };
+    const db = await app.getDb();
+    await db.put('calibrations', calibration);
+    calStatus.textContent = describeCalibration();
+  }
+
+  /** One 16-click session; returns click and onset times in recording base. */
+  async function runClickSession() {
     const ctx = await app.ensureAudio();
-    const bpm = 60;
-    app.scheduler.setBpm(bpm);
+    app.scheduler.setBpm(60);
     app.scheduler.setSubdivision(1);
     app.scheduler.setMeter({ beatsPerBar: 4, beatValue: 4 });
     const clickTimes = [];
@@ -119,10 +175,11 @@ export function mountRecord(container, app) {
       if (info.tick < 16) clickTimes.push(time);
     });
     app.metronome.arm({ countInBars: 0 });
-    const recStart = ctx.currentTime + 0.1;
-    recorder = await createRecorder(ctx, ctx.createMediaStreamSource(stream));
-    recorder.start();
-    app.scheduler.start();
+    // Measured origin: the worklet reports the frame capture actually began.
+    const { recorder: rec, originSec } = await recordingOrigin(ctx, ctx.createMediaStreamSource(stream));
+    recorder = rec;
+    // First click at least 0.2 s after the origin so the recording captures it.
+    app.scheduler.start(Math.max(0.06, originSec + 0.2 - ctx.currentTime));
 
     await new Promise((resolve) => {
       const check = setInterval(() => {
@@ -130,7 +187,13 @@ export function mountRecord(container, app) {
       }, 100);
       setTimeout(() => { clearInterval(check); resolve(); }, 20000);
     });
-    await new Promise((r) => setTimeout(r, 600));
+    // Let the last click ring and be detectable (same stop rule as assessment).
+    await new Promise((resolve) => {
+      const lastClick = clickTimes[clickTimes.length - 1] ?? ctx.currentTime;
+      const poll = setInterval(() => {
+        if (shouldStopNow(ctx.currentTime, lastClick)) { clearInterval(poll); resolve(); }
+      }, 50);
+    });
     app.scheduler.stop();
     app.metronome.disarm();
     unsub();
@@ -139,26 +202,54 @@ export function mountRecord(container, app) {
     recorder = null;
 
     const onsets = detectOnsets(take.samples, take.sampleRate, onsetOptions);
-    const clickRel = clickTimes.map((t) => t - recStart);
-    const result = computeCalibration(clickRel, onsets);
+    return { clickRel: toRecordingBase(clickTimes, originSec), onsets };
+  }
+
+  /** Acoustic loopback: the mic hears the clicks; measures system latency. */
+  async function runLoopback() {
+    const { clickRel, onsets } = await runClickSession();
+    const result = computeSystemCalibration(clickRel, onsets);
+    if (result.matched < 8) {
+      calStatus.textContent = `Only ${result.matched} of 16 clicks were heard. Check the input level and try again.`;
+      return;
+    }
+    const warn = jitterWarning(result.systemJitterMs, 10, 'the system (loopback) measurement');
+    await saveCalibration({
+      systemOffsetMs: result.systemOffsetMs,
+      systemJitterMs: result.systemJitterMs,
+      matched: result.matched,
+      method: calMethod,
+    });
+    calStatus.textContent += ' This is the system latency, which scoring subtracts.';
+    if (warn) calStatus.textContent += ` ${warn}`;
+    calStatus.textContent += ' Run the play-along check to see your own habitual offset.';
+  }
+
+  /** Play-along: the player plays with the clicks; reports habit separately. */
+  async function runPlayAlong({ informational = false } = {}) {
+    const { clickRel, onsets } = await runClickSession();
+    const system = calibration ? scoringOffsetMs(calibration) : 0;
+    const result = computePlayerHabit(clickRel, onsets, system);
     if (result.matched < 8) {
       calStatus.textContent = `Only ${result.matched} of 16 clicks were detected. Check the input level and try again.`;
       return;
     }
-    calibration = {
-      id: calibrationKey(deviceSelect.value, 'default'),
-      inputId: deviceSelect.value || 'default',
-      outputId: 'default',
-      offsetMs: result.offsetMs,
-      jitterMs: result.jitterMs,
-      matched: result.matched,
-      at: new Date().toISOString(),
-    };
-    const db = await app.getDb();
-    await db.put('calibrations', calibration);
-    const warn = jitterWarning(result.jitterMs);
-    calStatus.textContent = `Calibration saved: offset ${Math.round(result.offsetMs)} ms, jitter ${Math.round(result.jitterMs)} ms (${result.matched} clicks).`
-      + (warn ? ` ${warn}` : '');
+    const warn = jitterWarning(result.playerJitterMs, 10, 'the play-along measurement');
+    if (informational || calMethod !== 'playalong') {
+      await saveCalibration({ playerOffsetMs: result.playerOffsetMs, playerJitterMs: result.playerJitterMs });
+      calStatus.textContent += ` Your habitual offset is ${Math.round(result.playerOffsetMs)} ms (positive = late). Informational only; scoring subtracts the system offset.`;
+    } else {
+      // Option 1: the play-along measurement IS the stored calibration.
+      await saveCalibration({
+        systemOffsetMs: result.playAlongOffsetMs,
+        systemJitterMs: result.playerJitterMs,
+        playerOffsetMs: null,
+        playerJitterMs: null,
+        method: 'playalong',
+      });
+      calStatus.textContent += ' Stored play-along calibration. Bias figures are relative to your calibration.';
+    }
+    if (warn) calStatus.textContent += ` ${warn}`;
   }
 
   // ---------- assessment ----------
@@ -206,29 +297,44 @@ export function mountRecord(container, app) {
     app.metronome.setVolume(0.7);
     app.metronome.arm({ countInBars });
 
-    const recStart = ctx.currentTime + 0.15;
-    recorder = await createRecorder(ctx, ctx.createMediaStreamSource(stream));
-    recorder.start();
+    // Measured origin (worklet frame), never a guessed constant.
+    const { recorder: rec, originSec } = await recordingOrigin(ctx, ctx.createMediaStreamSource(stream));
+    recorder = rec;
+    const recStart = originSec;
+    // First scheduled tick at least 0.2 s after the origin so the count-in is
+    // captured fully.
+    const firstTickTime = Math.max(ctx.currentTime + 0.06, recStart + 0.2);
 
     const gridTimes = [];
     const totalTicks = (countInBars + bars) * beatsPerBar * subdivision;
     let ticks = 0;
     let expectedNotes = null;
+    const beatDur = 60 / bpm;
+    // Tab notes align to the first beat after the count-in.
+    const goTime = firstTickTime + countInBars * beatsPerBar * beatDur;
     if (mode === 'tab') {
       const tab = exercises.find((t) => t.id === exerciseSelect.value);
       if (tab) {
-        const beatDur = 60 / bpm;
-        expectedNotes = tab.notes.map((n) => ({ ...n, time: recStart + n.startBeat * beatDur }));
+        expectedNotes = tab.notes.map((n) => ({ ...n, time: goTime + n.startBeat * beatDur }));
       }
     }
     const unsub = app.scheduler.subscribe((time, info) => {
+      if (runState && runState.finished) return;
       ticks += 1;
       const isGrid = info.tick % subdivision === 0;
       if (info.tick >= countInBars * beatsPerBar * subdivision && isGrid) gridTimes.push(time);
-      if (ticks >= totalTicks) stopRun();
+      if (ticks >= totalTicks) {
+        // Do not stop here: this tick is only scheduled, not yet sounded.
+        // Stop after the last event actually rings (tail), polled off-scheduler.
+        runState.finished = true;
+        runState.lastTickTime = time;
+        runState.poll = setInterval(() => {
+          if (shouldStopNow(app.getCtx().currentTime, runState.lastTickTime)) stopRun();
+        }, 50);
+      }
     });
-    runState = { gridTimes, recStart, unsub, expectedNotes, bpm };
-    app.scheduler.start();
+    runState = { gridTimes, recStart, firstTickTime, unsub, expectedNotes, bpm };
+    app.scheduler.start(firstTickTime - ctx.currentTime);
     running = true;
     recordBtn.textContent = 'Stop';
     runStatus.textContent = `Recording ${bars} bar(s) at ${bpm} BPM after a ${countInBars}-bar count-in.`;
@@ -239,6 +345,7 @@ export function mountRecord(container, app) {
     running = false;
     recordBtn.textContent = 'Record assessment';
     const state = runState;
+    if (state.poll) clearInterval(state.poll);
     app.scheduler.stop();
     app.metronome.disarm();
     state.unsub();
@@ -283,20 +390,20 @@ export function mountRecord(container, app) {
 
   function renderResults(onsets, state) {
     resultsWrap.innerHTML = '';
-    const offsetMs = calibration ? calibration.offsetMs : 0;
+    const offsetMs = scoringOffsetMs(calibration);
     let report;
     let evenness = null;
 
     if (mode === 'tab' && state.expectedNotes) {
-      const expectedTimes = state.expectedNotes.map((n) => n.time - state.recStart);
-      const { matches, missed, extra } = alignOnsets(onsets, expectedTimes, { toleranceMs: 250 });
+      const expectedTimes = toRecordingBase(state.expectedNotes.map((n) => n.time), state.recStart);
+      const { matches, missed, extra } = alignOnsets(onsets, expectedTimes);
       const devs = matches.map((m) => m.deviationMs);
       const bias = devs.length ? devs.reduce((a, b) => a + b, 0) / devs.length : 0;
       const std = devs.length > 1 ? Math.sqrt(devs.reduce((a, b) => a + (b - bias) ** 2, 0) / (devs.length - 1)) : 0;
       report = { notes: matches.map((m) => ({ ...m, gridIndex: m.expectedIndex })), deviationsMs: devs, biasMs: bias, stdMs: std, missed, extra };
       evenness = rollEvenness({ notes: state.expectedNotes }, matches, onsets);
     } else {
-      const gridRel = state.gridTimes.map((t) => t - state.recStart);
+      const gridRel = toRecordingBase(state.gridTimes, state.recStart);
       report = scoreGrid(onsets, gridRel, { offsetMs });
     }
 
@@ -328,7 +435,7 @@ export function mountRecord(container, app) {
 
     resultsWrap.append(
       el('h3', { text: 'Report' }),
-      el('p', { class: 'mono', text: `Bias ${report.biasMs.toFixed(1)} ms - consistency (standard deviation) ${report.stdMs.toFixed(1)} ms - missed ${report.missed ?? 0} - extra ${report.extra ?? 0}` }),
+      el('p', { class: 'mono', text: `Bias ${report.biasMs.toFixed(1)} ms - consistency (standard deviation) ${report.stdMs.toFixed(1)} ms - missed ${report.missed ?? 0} - extra ${report.extra ?? 0}` + (calibration && calibration.method === 'playalong' && calibration.playerOffsetMs == null ? ' (bias relative to your calibration)' : '') }),
       el('p', { text: summary.text }),
       evenness ? el('p', { class: 'small muted', text: `Thumb notes spread: ${evenness.thumbStdMs == null ? 'n/a' : Math.round(evenness.thumbStdMs) + ' ms'} - index and middle: ${evenness.fingerStdMs == null ? 'n/a' : Math.round(evenness.fingerStdMs) + ' ms'} - inter-onset interval spread: ${evenness.ioiSpreadMs == null ? 'n/a' : Math.round(evenness.ioiSpreadMs) + ' ms'}` }) : null,
       waveformCanvas,
@@ -486,9 +593,10 @@ export function mountRecord(container, app) {
     ),
     el('div', { class: 'panel' },
       el('h3', { text: 'Calibration' }),
-      el('div', { class: 'row' }, calBtn),
+      calMethodSelect,
+      el('div', { class: 'row' }, calBtn, playAlongBtn),
       calStatus,
-      el('p', { class: 'muted small', text: 'Play 16 clicks over wired headphones along with the app. The mean offset and jitter are saved per device pair. Deviations in reports are corrected by the saved offset.' }),
+      el('p', { class: 'muted small', text: 'Loopback: play 16 clicks through the speakers (or hold headphones against the microphone) so the microphone hears only the clicks; this measures the true system latency and is the only figure scoring subtracts. Play-along: play along with the clicks; your habitual lead or lag is shown separately and never subtracted. Wired headphones are recommended.' }),
     ),
     el('div', { class: 'panel' },
       el('h3', { text: 'Assessment' }),

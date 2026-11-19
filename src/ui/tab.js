@@ -10,6 +10,7 @@ import { stringFretToFreq, resolveTuning, beatsPerMeasure, measureCount } from '
 import { playNote } from '../audio/synth.js';
 import { createSpeedTrainer } from '../features/speed-trainer.js';
 import { detectOnsets } from '../audio/onset.js';
+import { sliceSamples, entriesInRange } from '../audio/recorder-core.js';
 import { alignOnsets } from '../features/alignment.js';
 import { rollEvenness, summarizeTiming } from '../features/timing-report.js';
 
@@ -19,8 +20,8 @@ export function mountTab(container, app) {
   let playing = false;
   let rafId = 0;
   let passUnsub = null;
-  let recorder = null;
-  let recStartCtxTime = 0;
+  let assessment = null; // { stream, recorder, origin } — one long-lived session
+  let passStartCtx = null;
   let assessmentOn = false;
   let trainer = null;
   let loop = { startMeasure: 0, endMeasure: measureCount({ timeSignature: [4, 4], notes: [] }) };
@@ -147,16 +148,23 @@ export function mountTab(container, app) {
     playing = true;
     playBtn.textContent = 'Stop';
 
-    // count beats to detect pass (one loop region) completion
+    // Track loop windows from scheduled beat times (audio clock).
+    passStartCtx = null;
     passUnsub = app.scheduler.subscribe((time, info) => {
       if (!info.isBeat) return;
       const tickCountIn = countInBars * info.beatsPerBar;
       if (info.tick < tickCountIn) return;
+      if (passStartCtx == null) { passStartCtx = time; beatsPlayed = 0; return; }
       beatsPlayed += 1;
-      if (beatsPlayed % regionBeats === 0) onPassComplete();
+      if (beatsPlayed % regionBeats === 0) {
+        const passEnd = time;
+        if (assessmentOn && assessment) judgeLoop(passStartCtx, passEnd);
+        passStartCtx = passEnd;
+      }
     });
 
-    if (assessmentOn) await startPassRecording();
+    // One long-lived recording session covers all loops (see setupAssessment).
+    if (assessmentOn && !assessment) await setupAssessment();
   }
 
   function stopPlayback() {
@@ -164,23 +172,30 @@ export function mountTab(container, app) {
     app.player.stop();
     app.metronome.disarm();
     if (passUnsub) { passUnsub(); passUnsub = null; }
-    if (recorder) { recorder.dispose(); recorder = null; }
+    // The assessment recorder keeps running: it spans the whole practice
+    // session and is only closed when assessment is switched off or the view
+    // unmounts.
     playing = false;
     playBtn.textContent = 'Play';
     const g = svgWrap.querySelector('.tab-cursor');
     if (g) g.setAttribute('visibility', 'hidden');
   }
 
-  async function startPassRecording() {
+  /** Open the microphone and recorder once for the whole practice session. */
+  async function setupAssessment() {
+    if (assessment) return;
     try {
-      const { startCapture, createRecorder, stopCapture } = await import('../audio/capture.js');
+      const { startCapture, recordingOrigin } = await import('../audio/capture.js');
       const stream = await startCapture({ deviceId: await app.settings.get('inputDeviceId', null) });
       const ctx = await app.ensureAudio();
       const source = ctx.createMediaStreamSource(stream);
-      recorder = await createRecorder(ctx, source);
-      recorder._stream = stream;
-      recStartCtxTime = ctx.currentTime + 0.05;
-      recorder.start();
+      // Measured origin; the recorder then runs continuously and each loop is
+      // judged from a slice of the buffer.
+      const { recorder: rec, originSec } = await recordingOrigin(ctx, source, {
+        maxSamples: 10 * 60 * ctx.sampleRate, // bound memory at ~10 minutes
+      });
+      rec._stream = stream;
+      assessment = { stream, recorder: rec, origin: originSec };
     } catch (err) {
       console.error('assessment recording failed', err);
       assessmentToggle.checked = false;
@@ -188,24 +203,25 @@ export function mountTab(container, app) {
     }
   }
 
-  async function onPassComplete() {
-    if (!assessmentOn || !recorder || !current) return;
-    const rec = recorder;
-    const startedAt = recStartCtxTime;
+  async function teardownAssessment() {
+    if (!assessment) return;
     const { stopCapture } = await import('../audio/capture.js');
-    const take = await rec.stop();
-    if (rec._stream) stopCapture(rec._stream);
-    rec.dispose();
-    recorder = null;
+    try { await assessment.recorder.stop(); } catch { /* already stopped */ }
+    assessment.recorder.dispose();
+    stopCapture(assessment.stream);
+    assessment = null;
+  }
 
-    // expected note times for the finished pass, in recording time base
-    const expectedTimes = app.player.cursorQueue()
-      .filter((e) => e.time >= startedAt)
-      .map((e) => e.time - startedAt);
-    const analysis = analyzeTake(take, expectedTimes);
+  /** Judge one completed loop from its slice of the continuous recording. */
+  function judgeLoop(passStart, passEnd) {
+    if (!assessment || !current) return;
+    const { samples, sampleRate } = assessment.recorder.snapshot();
+    const slice = sliceSamples(samples, sampleRate, assessment.origin, passStart, passEnd);
+    // Expected notes of this loop: scheduled times within the loop window.
+    const expected = entriesInRange(app.player.cursorQueue(), passStart, passEnd);
+    const expectedTimes = expected.map((e) => e.time - passStart);
+    const analysis = analyzeTake({ samples: slice.samples, sampleRate }, expectedTimes);
     judgePass(analysis);
-
-    if (playing) await startPassRecording();
   }
 
   function analyzeTake(take, expectedTimes) {
@@ -214,7 +230,7 @@ export function mountTab(container, app) {
       minIntervalMs: 60,
     };
     const onsets = detectOnsets(take.samples, take.sampleRate, settings);
-    const { matches, missed, extra } = alignOnsets(onsets, expectedTimes, { toleranceMs: 250 });
+    const { matches, missed, extra } = alignOnsets(onsets, expectedTimes);
     const deviations = matches.map((m) => m.deviationMs);
     const mean = deviations.length ? deviations.reduce((a, b) => a + b, 0) / deviations.length : 0;
     const std = deviations.length > 1
@@ -325,7 +341,11 @@ export function mountTab(container, app) {
   const requiredCleanInput = numberInput(2, { min: 1, max: 10, label: 'Clean passes per step' });
   const assessmentCheckbox = el('input', {
     type: 'checkbox', id: 'assessment-on',
-    onChange: (e) => { assessmentOn = e.target.checked; },
+    onChange: (e) => {
+      assessmentOn = e.target.checked;
+      if (assessmentOn) setupAssessment();
+      else teardownAssessment();
+    },
   });
 
   function buildTrainer() {
@@ -427,6 +447,7 @@ export function mountTab(container, app) {
   return {
     unmount() {
       if (playing) stopPlayback();
+      teardownAssessment();
       for (const fn of cleanups) fn();
     },
     onKey(e) {

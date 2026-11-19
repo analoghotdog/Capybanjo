@@ -1,5 +1,5 @@
 // Timing report (pure logic: no DOM, no Web Audio; standard ES module).
-import { alignOnsets } from './alignment.js';
+import { alignOnsets, toleranceForExpected } from './alignment.js';
 
 /** Sample standard deviation (n-1 denominator). Null when n < 2. */
 function sampleStd(values) {
@@ -29,13 +29,16 @@ function mean(values) {
  * stdMs = sample standard deviation of matched deviations (n-1 denominator;
  * null when fewer than 2 notes matched, since the n-1 estimator is undefined).
  *
+ * toleranceMs defaults to the tempo-aware toleranceForExpected(grid):
+ * min(250, 0.45 x the smallest gap between consecutive grid times).
+ *
  * @param {number[]} onsetTimes seconds
  * @param {number[]} gridTimes seconds
  * @param {{ offsetMs?: number, toleranceMs?: number }} [options]
  */
 export function scoreGrid(onsetTimes, gridTimes, options = {}) {
   const offsetMs = options.offsetMs == null ? 0 : options.offsetMs;
-  const toleranceMs = options.toleranceMs == null ? 250 : options.toleranceMs;
+  const toleranceMs = options.toleranceMs == null ? toleranceForExpected(gridTimes) : options.toleranceMs;
   const onsets = Array.isArray(onsetTimes) ? onsetTimes : [];
   const grid = Array.isArray(gridTimes) ? gridTimes : [];
 

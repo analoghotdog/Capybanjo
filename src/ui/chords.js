@@ -3,8 +3,7 @@
 // confirmation using the pitch module.
 
 import { el, numberInput, select } from './dom.js';
-import { OPEN_G_CHORDS, renderChordDiagram, createChordDrill, chordByKey } from '../features/chords.js';
-import { stringFretToFreq, resolveTuning, noteToMidi, TUNINGS } from '../tab/model.js';
+import { OPEN_G_CHORDS, renderChordDiagram, createChordDrill, isChordRootPitch } from '../features/chords.js';
 import { detectPitchYIN } from '../audio/pitch.js';
 
 export function mountChords(container, app) {
@@ -129,36 +128,20 @@ export function mountChords(container, app) {
     }
   }
 
-  function chordToneFreqs(chord) {
-    const tuning = resolveTuning(TUNINGS.openG);
-    const freqs = [];
-    for (const s of [1, 2, 3, 4, 5]) {
-      const f = chord.frets[s];
-      if (f == null || f < 0) continue;
-      freqs.push(stringFretToFreq(tuning, s, f));
-    }
-    return freqs;
-  }
-
   function checkPitchLoop() {
     if (!running || !analyser) return;
     analyser.getFloatTimeDomainData(micBuf);
     const { frequency } = detectPitchYIN(micBuf, app.getCtx().sampleRate);
     if (frequency && drill) {
-      const state = drill.getState();
-      // judge the prompt that is currently displayed: most recent step chord
+      // Root pitch check only (within 30 cents): this confirms that the chord
+      // root was played — it is deliberately not chord recognition.
       const current = promptWrap.querySelector('.mono');
       const name = current && /Now: (\w+)/.exec(current.textContent);
-      if (name) {
-        const chord = chordByKey(name[1]);
-        if (chord) {
-          const targets = chordToneFreqs(chord);
-          const centsList = targets.map((t) => Math.abs(1200 * Math.log2(frequency / t)));
-          const matched = centsList.some((c) => c < 60);
-          if (matched) {
-            if (!heard.has(chord.key)) heard.set(chord.key, { hits: 0, misses: 0 });
-            if (!heard.get(chord.key)._beat) { heard.get(chord.key).hits += 1; heard.get(chord.key)._beat = true; }
-          }
+      if (name && isChordRootPitch(frequency, name[1], 30)) {
+        if (!heard.has(name[1])) heard.set(name[1], { hits: 0, misses: 0 });
+        if (!heard.get(name[1])._beat) {
+          heard.get(name[1]).hits += 1;
+          heard.get(name[1])._beat = true;
         }
       }
     }
@@ -171,7 +154,7 @@ export function mountChords(container, app) {
       el('h3', { text: 'Chord-change drill' }),
       chordChecks,
       el('div', { class: 'row' }, beatsInput, barsInput),
-      el('label', { class: 'row' }, micCheck, el('span', { text: 'Confirm changes with the microphone (pitch detection)' })),
+      el('label', { class: 'row' }, micCheck, el('span', { text: 'Confirm that the chord root was played (microphone pitch check of the root within 30 cents; not chord recognition)' })),
       el('div', { class: 'row' }, startBtn),
       status,
       promptWrap,

@@ -1,6 +1,24 @@
 // Onset alignment (pure logic: no DOM, no Web Audio; standard ES module).
 
 /**
+ * Tempo-aware matching tolerance: min(maxMs, factor x smallest gap between
+ * consecutive expected times). A fixed 250 ms window is wider than the note
+ * spacing at higher tempos, which lets an onset match the wrong note.
+ * With fewer than two points (or degenerate gaps) the maxMs default applies.
+ */
+export function toleranceForExpected(expectedTimes, { maxMs = 250, factor = 0.45 } = {}) {
+  const times = (Array.isArray(expectedTimes) ? expectedTimes : []).filter(Number.isFinite);
+  if (times.length < 2) return maxMs;
+  const sorted = [...times].sort((a, b) => a - b);
+  let minGap = Infinity;
+  for (let i = 1; i < sorted.length; i++) {
+    minGap = Math.min(minGap, sorted[i] - sorted[i - 1]);
+  }
+  if (!Number.isFinite(minGap) || minGap <= 0) return maxMs;
+  return Math.min(maxMs, factor * minGap * 1000);
+}
+
+/**
  * Align detected onset times to expected note times.
  *
  * Algorithm: dynamic programming over prefixes of the two sequences.
@@ -21,6 +39,8 @@
  * @param {number[]} detectedTimes onset times in seconds
  * @param {number[]} expectedTimes expected note times in seconds
  * @param {{ toleranceMs?: number }} [options]
+ *   toleranceMs defaults to toleranceForExpected(expectedTimes), i.e.
+ *   min(250, 0.45 x the smallest gap between consecutive expected times).
  * @returns {{ matches: Array<{expectedIndex: number, detectedIndex: number, deviationMs: number}>,
  *             missed: number[], extra: number[] }}
  *   matches sorted by expectedIndex; deviationMs = (detected - expected) * 1000
@@ -28,7 +48,7 @@
  *   extra: detected indices with no match.
  */
 export function alignOnsets(detectedTimes, expectedTimes, options = {}) {
-  const toleranceMs = options.toleranceMs == null ? 250 : options.toleranceMs;
+  const toleranceMs = options.toleranceMs == null ? toleranceForExpected(expectedTimes) : options.toleranceMs;
   const det = Array.isArray(detectedTimes) ? detectedTimes : [];
   const exp = Array.isArray(expectedTimes) ? expectedTimes : [];
   const n = exp.length;

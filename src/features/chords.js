@@ -21,6 +21,29 @@ export function chordByKey(key) {
   return OPEN_G_CHORDS.find((c) => c.key === key) || null;
 }
 
+const ROOT_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+
+/** Root pitch class of a chord key: 'G' -> 'G', 'D7' -> 'D', 'Em' -> 'E'. */
+export function chordRootName(key) {
+  const m = /^([A-Ga-g])([#b]?)/.exec(String(key));
+  return m ? m[1].toUpperCase() + m[2] : null;
+}
+
+/**
+ * Is this frequency the chord's ROOT (any octave) within toleranceCents?
+ * This is a single-pitch check for the root note only — it is deliberately
+ * not chord recognition (fix plan F8).
+ */
+export function isChordRootPitch(freq, chordKey, toleranceCents = 30) {
+  const root = chordRootName(chordKey);
+  if (!root || !(freq > 0)) return false;
+  const acc = root.endsWith('#') ? 1 : root.endsWith('b') ? -1 : 0;
+  const pc = ROOT_PC[root[0]] + acc;
+  const midiFloat = 69 + 12 * Math.log2(freq / 440);
+  const nearest = Math.round((midiFloat - pc) / 12) * 12 + pc;
+  return Math.abs((midiFloat - nearest) * 100) <= toleranceCents;
+}
+
 /**
  * SVG chord diagram (frets horizontal, strings vertical).
  * Drawn as string 4 on the left through string 1, with the short 5th string on

@@ -89,10 +89,26 @@ export function createLevelMeter(analyser) {
 }
 
 /**
- * PCM recorder backed by an AudioWorklet. Chunks are collected on the main
- * thread into one Float32Array per channel (mono mixdown).
+ * Start a recording session and establish its measured origin.
+ * Creates the recorder (loading the AudioWorklet), starts it, and returns the
+ * audio-clock time at which capture actually began. All conversions between
+ * audio-clock times and recording times must use this origin — never a guessed
+ * `ctx.currentTime + constant`.
  */
-export async function createRecorder(ctx, sourceNode) {
+export async function recordingOrigin(ctx, sourceNode, options = {}) {
+  const recorder = await createRecorder(ctx, sourceNode, options);
+  const originSec = await recorder.start();
+  return { recorder, originSec };
+}
+
+/**
+ * PCM recorder backed by an AudioWorklet (see recorder-worklet.js for the
+ * message protocol). The measured recording origin is exposed: `start()`
+ * resolves to the audio-clock time at which the worklet actually began
+ * capturing, so timing analysis never has to guess.
+ */
+export async function createRecorder(ctx, sourceNode, options = {}) {
+  const { createRecorderSession, frameToCtxTime } = await import('./recorder-core.js');
   const workletUrl = new URL('./recorder-worklet.js', import.meta.url);
   await ctx.audioWorklet.addModule(workletUrl);
   const node = new AudioWorkletNode(ctx, 'banjo-recorder', {
@@ -103,33 +119,57 @@ export async function createRecorder(ctx, sourceNode) {
   sourceNode.connect(node);
   node.connect(ctx.destination); // keep the graph pulled; output is silent
 
-  let chunks = [];
+  const session = createRecorderSession({
+    sampleRate: ctx.sampleRate,
+    maxSamples: options.maxSamples ?? Infinity,
+  });
+  let startedResolve = null;
+  const startedAtCtxTime = new Promise((resolve) => { startedResolve = resolve; });
+  let stoppedResolve = null;
   let recording = false;
+
   node.port.onmessage = (e) => {
-    if (recording && e.data instanceof Float32Array) chunks.push(e.data);
+    const evt = session.handleMessage(e.data);
+    if (evt.event === 'started' && startedResolve) { startedResolve(evt.ctxTime); startedResolve = null; }
+    if (evt.event === 'stopped' && stoppedResolve) { stoppedResolve(); stoppedResolve = null; }
   };
 
   return {
+    /** Resolves to the measured origin (audio-clock seconds). */
+    startedAtCtxTime,
     start() {
-      chunks = [];
       recording = true;
-      node.port.postMessage('start');
+      node.port.postMessage({ type: 'start' });
+      return startedAtCtxTime;
     },
-    /** @returns {Promise<{ samples: Float32Array, sampleRate: number }>} */
-    stop() {
+    /**
+     * Stop and assemble. Waits for the worklet's 'stopped' acknowledgement
+     * (200 ms timeout) so the final chunks are not lost.
+     * @returns {Promise<{ samples: Float32Array, sampleRate: number,
+     *   startedAtCtxTime: number|null, gaps: Array<{atFrame: number, missingFrames: number}> }>}
+     */
+    async stop() {
       recording = false;
-      node.port.postMessage('stop');
-      const total = chunks.reduce((n, c) => n + c.length, 0);
-      const out = new Float32Array(total);
-      let off = 0;
-      for (const c of chunks) {
-        out.set(c, off);
-        off += c.length;
-      }
-      chunks = [];
-      return Promise.resolve({ samples: out, sampleRate: ctx.sampleRate });
+      const ack = new Promise((resolve) => { stoppedResolve = resolve; });
+      node.port.postMessage({ type: 'stop' });
+      await Promise.race([ack, new Promise((r) => setTimeout(r, 200))]);
+      const { samples, gaps } = session.assemble();
+      return {
+        samples,
+        sampleRate: ctx.sampleRate,
+        startedAtCtxTime: session.startedAtCtxTime,
+        gaps,
+      };
     },
     isRecording: () => recording,
+    /**
+     * Samples received so far, without stopping. Used to judge one loop of a
+     * continuously recorded session from a slice of the buffer.
+     */
+    snapshot() {
+      const { samples, gaps } = session.assemble();
+      return { samples, sampleRate: ctx.sampleRate, gaps };
+    },
     dispose() {
       try { sourceNode.disconnect(node); node.disconnect(); } catch { /* torn down */ }
     },
