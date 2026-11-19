@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "note": "Roll patterns are editable data, not code. Teachers vary slightly; the owner should confirm these against their own teaching material. Strings are 1..5 (1 = D4 top line in the tab renderer), fingers T/I/M. All notes are open-string eighth notes.",
+  "rolls": [
+    {
+      "key": "forward",
+      "title": "Forward roll",
+      "tuning": "openG",
+      "timeSignature": [4, 4],
+      "tempoHint": 60,
+      "measures": 4,
+      "pattern": {
+        "strings": [3, 2, 1, 3, 2, 1, 3, 2],
+        "fingers": ["T", "I", "M", "T", "I", "M", "T", "I"]
+      }
+    },
+    {
+      "key": "backward",
+      "title": "Backward roll",
+      "tuning": "openG",
+      "timeSignature": [4, 4],
+      "tempoHint": 60,
+      "measures": 4,
+      "pattern": {
+        "strings": [1, 2, 3, 1, 2, 3, 1, 2],
+        "fingers": ["M", "I", "T", "M", "I", "T", "M", "I"]
+      }
+    },
+    {
+      "key": "forward-reverse",
+      "title": "Forward-reverse roll",
+      "tuning": "openG",
+      "timeSignature": [4, 4],
+      "tempoHint": 60,
+      "measures": 4,
+      "pattern": {
+        "strings": [3, 2, 1, 5, 1, 2, 3, 1],
+        "fingers": ["T", "I", "M", "T", "M", "I", "T", "M"]
+      }
+    },
+    {
+      "key": "alternating-thumb",
+      "title": "Alternating-thumb roll",
+      "tuning": "openG",
+      "timeSignature": [4, 4],
+      "tempoHint": 60,
+      "measures": 4,
+      "pattern": {
+        "strings": [3, 2, 5, 1, 3, 2, 5, 1],
+        "fingers": ["T", "I", "T", "M", "T", "I", "T", "M"]
+      }
+    }
+  ]
+}

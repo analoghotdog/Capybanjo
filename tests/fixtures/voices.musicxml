@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1">
+      <part-name>Banjo</part-name>
+    </score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>2</divisions>
+        <time>
+          <beats>4</beats>
+          <beat-type>4</beat-type>
+        </time>
+      </attributes>
+      <direction>
+        <direction-type>
+          <metronome>
+            <beat-unit>half</beat-unit>
+            <per-minute>60</per-minute>
+          </metronome>
+        </direction-type>
+      </direction>
+      <!-- Voice 1 -->
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>2</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <technical><string>1</string><fret>0</fret></technical>
+      </note>
+      <note>
+        <pitch><step>B</step><octave>3</octave></pitch>
+        <duration>2</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <technical><string>2</string><fret>0</fret></technical>
+      </note>
+      <backup>
+        <duration>4</duration>
+      </backup>
+      <!-- Voice 2 -->
+      <note>
+        <pitch><step>G</step><octave>3</octave></pitch>
+        <duration>2</duration>
+        <type>quarter</type>
+        <voice>2</voice>
+        <technical><string>3</string><fret>0</fret></technical>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>3</octave></pitch>
+        <duration>2</duration>
+        <type>quarter</type>
+        <voice>2</voice>
+        <technical><string>4</string><fret>0</fret></technical>
+      </note>
+    </measure>
+  </part>
+</score-partwise>

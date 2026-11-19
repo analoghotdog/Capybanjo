@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Banjo Practice</title>
+  <meta name="description" content="Offline banjo practice tools: metronome, tab playback, timing assessment, tuner and practice log.">
+  <meta name="theme-color" content="#2f5d50">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#view">Skip to content</a>
+  <header class="topbar">
+    <h1>Banjo Practice</h1>
+    <nav id="nav" aria-label="Main">
+      <a href="#/metronome">Metronome</a>
+      <a href="#/tab">Tab</a>
+      <a href="#/record">Record</a>
+      <a href="#/tuner">Tuner</a>
+      <a href="#/chords">Chords</a>
+      <a href="#/log">Log</a>
+      <a href="#/import">Import</a>
+      <a href="#/settings">Settings</a>
+    </nav>
+  </header>
+
+  <div id="banner-update" class="banner" hidden>
+    <span>Update available.</span>
+    <button type="button" id="banner-update-reload">Reload</button>
+    <button type="button" class="link" id="banner-update-dismiss">Later</button>
+  </div>
+  <div id="banner-backup" class="banner" hidden>
+    <span>No backup export in over 30 days. Consider exporting your data from Settings.</span>
+    <button type="button" class="link" id="banner-backup-dismiss">Dismiss</button>
+  </div>
+
+  <main id="view" tabindex="-1"></main>
+
+  <footer class="foot">
+    <p>Runs fully offline after install. Recordings, logs and imported tabs stay in this browser.</p>
+  </footer>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>
