@@ -64,7 +64,7 @@ export function createPlayer({ scheduler, getCtx, output = null }) {
 
     // End of loop region: rebase so the region restarts on the next tick.
     if (nextTickBeat - origin >= toBeat - 1e-9) {
-      origin -= toBeat - wrapBeat;
+      origin += toBeat - wrapBeat;
       pointer = notes.findIndex((n) => n.startBeat >= wrapBeat - 1e-9);
       if (pointer < 0) pointer = notes.length;
     }

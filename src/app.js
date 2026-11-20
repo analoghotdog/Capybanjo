@@ -162,6 +162,7 @@ function showUpdateBanner(registration) {
   updateBanner.hidden = false;
   const btn = document.getElementById('banner-update-reload');
   btn.onclick = () => {
+    updateBanner.hidden = true;
     // The user asked for the update: allow the controller change to reload.
     reloadRequested = true;
     if (registration && registration.waiting) {

@@ -132,6 +132,7 @@ p { margin: 0.5rem 0; }
   color: var(--fg);
   border-bottom: 1px solid var(--line);
 }
+.banner[hidden] { display: none; }
 
 .panel {
   background: var(--panel);
