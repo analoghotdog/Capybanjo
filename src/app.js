@@ -9,6 +9,7 @@ import { createPlayer } from './audio/player.js';
 import { openDb } from './storage/db.js';
 import { logEntry, ensureSession } from './features/practice-log.js';
 import { mountMetronome } from './ui/metronome.js';
+import { mountPractice } from './ui/practice.js';
 import { mountTab } from './ui/tab.js';
 import { mountRecord } from './ui/record.js';
 import { mountTuner } from './ui/tuner.js';
@@ -95,6 +96,7 @@ const app = {
 // ---- Router ---------------------------------------------------------------
 
 const routes = {
+  practice: mountPractice,
   metronome: mountMetronome,
   tab: mountTab,
   record: mountRecord,
@@ -111,7 +113,7 @@ let activeName = null;
 
 function currentRoute() {
   const hash = location.hash.replace(/^#\/?/, '').split('?')[0];
-  return routes[hash] ? hash : 'metronome';
+  return routes[hash] ? hash : 'practice';
 }
 
 function render() {
@@ -132,7 +134,7 @@ function render() {
 }
 
 window.addEventListener('hashchange', render);
-if (!location.hash) location.hash = '#/metronome';
+if (!location.hash) location.hash = '#/practice';
 render();
 
 // ---- Global keyboard shortcuts (dispatched to the active view) -------------

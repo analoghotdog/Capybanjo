@@ -3,7 +3,7 @@
 // messages SKIP_WAITING when the user chooses to reload).
 // Relative paths everywhere: GitHub project sites live under /<repo-name>/.
 
-const CACHE = 'banjo-v5';
+const CACHE = 'banjo-v7';
 
 const PRECACHE = [
   './',
@@ -44,6 +44,7 @@ const PRECACHE = [
   'src/ui/import.js',
   'src/ui/log.js',
   'src/ui/metronome.js',
+  'src/ui/practice.js',
   'src/ui/record.js',
   'src/ui/settings.js',
   'src/ui/tab.js',

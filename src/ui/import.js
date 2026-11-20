@@ -3,11 +3,11 @@
 // All paths share one confirmation screen (title, tuning, time signature,
 // string mapping, rhythm step), a preview renderer, and the saved-tab library.
 
-import { el, select } from './dom.js';
+import { el, numberInput, select } from './dom.js';
 import { parseAsciiTab } from '../tab/parse-ascii.js';
 import { parseMusicXML } from '../tab/parse-musicxml.js';
 import { renderTabSvg } from '../tab/render.js';
-import { TUNINGS, noteToMidi, resolveTuning, measureCount } from '../tab/model.js';
+import { TUNINGS, noteToMidi, resolveTuning, measureCount, validateTab } from '../tab/model.js';
 import { createGuitarNoteMapper, GUITAR_TUNINGS } from '../tab/guitar-conversion.js';
 
 const TUNING_OPTIONS = [
@@ -93,6 +93,7 @@ export function mountImport(container, app) {
     const warningsBox = el('div');
     const preview = el('div', { class: 'panel' });
     const ambiguousBox = el('div');
+    const editorWrap = el('div', { class: 'panel hidden' });
     let reparsed = false;
     let saveBtn;
 
@@ -130,6 +131,86 @@ export function mountImport(container, app) {
       ambiguousBox.append(table);
     }
 
+    function renderEditor() {
+      editorWrap.innerHTML = '';
+      editorWrap.append(el('h3', { text: `Edit notes (${tab.notes.length})` }));
+      if (!tab.notes.length) {
+        editorWrap.append(el('p', { class: 'muted small', text: 'No notes to edit. Add a note to begin.' }));
+      }
+      const table = el('table');
+      table.append(el('tr', {},
+        el('th', { text: 'Beat' }),
+        el('th', { text: 'String' }),
+        el('th', { text: 'Fret' }),
+        el('th', { text: 'Duration (beats)' }),
+        el('th', { text: '' }),
+      ));
+      tab.notes.forEach((note, index) => {
+        const beatInput = numberInput(note.startBeat, {
+          min: 0, max: 9999, step: 0.25, label: `Note ${index + 1} start beat`,
+          onInput: (v) => { note.startBeat = v; renderPreview(); },
+        });
+        const stringSelect = select(
+          [1, 2, 3, 4, 5].map((string) => [String(string), `String ${string}`]),
+          String(note.string),
+          (v) => { note.string = parseInt(v, 10); renderPreview(); },
+          `Note ${index + 1} string`,
+        );
+        const fretInput = numberInput(note.fret, {
+          min: 0, max: 36, label: `Note ${index + 1} fret`,
+          onInput: (v) => { note.fret = v; renderPreview(); },
+        });
+        const durationInput = numberInput(note.durationBeats, {
+          min: 0.01, max: 999, step: 0.25, label: `Note ${index + 1} duration`,
+          onInput: (v) => { note.durationBeats = v; },
+        });
+        table.append(el('tr', {},
+          el('td', {}, beatInput),
+          el('td', {}, stringSelect),
+          el('td', {}, fretInput),
+          el('td', {}, durationInput),
+          el('td', {}, el('button', {
+            type: 'button', class: 'link', text: 'Delete',
+            onClick: () => {
+              tab.notes.splice(index, 1);
+              renderEditor();
+              renderPreview();
+            },
+          })),
+        ));
+      });
+      editorWrap.append(table);
+    }
+
+    const editNotesButton = el('button', {
+      type: 'button',
+      class: 'secondary',
+      text: 'Edit notes',
+      onClick: () => {
+        const opening = editorWrap.classList.contains('hidden');
+        editorWrap.classList.toggle('hidden', !opening);
+        editNotesButton.textContent = opening ? 'Hide note editor' : 'Edit notes';
+        if (opening) renderEditor();
+      },
+    });
+    const addNoteButton = el('button', {
+      type: 'button',
+      class: 'secondary',
+      text: 'Add note',
+      onClick: () => {
+        const lastBeat = tab.notes.reduce((end, note) => Math.max(end, note.startBeat), 0);
+        tab.notes.push({
+          string: 1,
+          fret: 0,
+          startBeat: tab.notes.length ? lastBeat + 0.5 : 0,
+          durationBeats: 0.5,
+          finger: null,
+        });
+        renderEditor();
+        renderPreview();
+      },
+    });
+
     function reparse() {
       const isGuitar = sourceTypeSelect.value === 'guitar';
       guitarTuningField.classList.toggle('hidden', !isGuitar);
@@ -157,6 +238,12 @@ export function mountImport(container, app) {
     saveBtn = el('button', {
       type: 'button', text: 'Save tab',
       onClick: async () => {
+        const validation = validateTab(tab);
+        if (!validation.ok) {
+          status.textContent = `Cannot save this tab: ${validation.errors.join('; ')}`;
+          return;
+        }
+        tab.notes.sort((a, b) => a.startBeat - b.startBeat || a.string - b.string);
         const db = await app.getDb();
         const saved = {
           ...tab,
@@ -182,6 +269,8 @@ export function mountImport(container, app) {
         : guitarTuningField,
       warningsBox,
       ambiguousBox,
+      el('div', { class: 'row' }, editNotesButton, addNoteButton),
+      editorWrap,
       preview,
       el('div', { class: 'row' }, saveBtn,
         el('button', { type: 'button', class: 'secondary', text: 'Cancel', onClick: () => { pipeline.innerHTML = ''; reparseActive = null; } })),

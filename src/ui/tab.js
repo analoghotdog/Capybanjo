@@ -28,6 +28,8 @@ export function mountTab(container, app) {
   let beatsPlayed = 0;
   let regionBeats = 0;
   let cleanups = [];
+  let routineStepStartedAt = 0;
+  let trainerRoutineId = null;
 
   // ---- exercise picker ----
   const picker = el('select', {
@@ -58,7 +60,9 @@ export function mountTab(container, app) {
       picker.append(og);
     }
     if (tabs.length) {
-      const pending = tabs.find((t) => t.tab.id === app.pendingTabId);
+      const routineStep = app.activeRoutine?.steps?.[app.activeRoutine.index];
+      const pendingId = app.pendingTabId || (routineStep && routineStep.exerciseId);
+      const pending = tabs.find((t) => t.tab.id === pendingId);
       if (pending) {
         app.pendingTabId = null;
         selectTab(pending.tab);
@@ -109,18 +113,37 @@ export function mountTab(container, app) {
   function selectTab(tab) {
     current = tab;
     picker.value = tab.id;
-    loop = { startMeasure: 0, endMeasure: Math.max(0, measureCount(tab) - 1) };
+    const measures = Math.max(1, measureCount(tab));
+    const step = app.activeRoutine?.steps?.[app.activeRoutine.index];
+    const startMeasure = Math.min(measures - 1, Math.max(0, step?.startMeasure ?? 0));
+    const endMeasure = Math.min(measures - 1, Math.max(startMeasure, step?.endMeasure ?? measures - 1));
+    loop = { startMeasure, endMeasure };
     loopStart.value = loop.startMeasure + 1;
     loopEnd.value = loop.endMeasure + 1;
+    loopStart.max = measures;
+    loopEnd.max = measures;
+    routineStepStartedAt = Date.now();
+    const speedSettings = app.activeRoutine?.speedSettings;
+    if (speedSettings && trainerRoutineId !== app.activeRoutine.id) {
+      startBpmInput.value = speedSettings.startBpm;
+      targetBpmInput.value = speedSettings.targetBpm;
+      stepInput.value = speedSettings.step;
+      requiredCleanInput.value = speedSettings.requiredClean;
+      buildTrainer();
+      trainerRoutineId = app.activeRoutine.id;
+    }
     draw();
     updatePlayStringRow();
+    updateRoutinePanel();
   }
 
   // ---- transport ----
   async function startPlayback() {
     if (!current) return;
     await app.ensureAudio();
-    const bpm = current.tempoHint || (await app.settings.get('bpm', 100));
+    const routineStep = app.activeRoutine?.steps?.[app.activeRoutine.index];
+    const drillBpm = routineStep?.bpm && trainer ? trainer.getState().bpm : routineStep?.bpm;
+    const bpm = drillBpm || current.tempoHint || (await app.settings.get('bpm', 100));
     const ts = current.timeSignature;
     app.scheduler.setBpm(bpm);
     app.scheduler.setSubdivision(1);
@@ -264,12 +287,102 @@ export function mountTab(container, app) {
       : `Pass not clean: ${analysis.missed.length} missed, ${analysis.extra.length} extra, consistency ${Math.round(analysis.stdMs)} ms.`;
   }
 
+  function updateRoutinePanel() {
+    const routine = app.activeRoutine;
+    if (!routine || !routine.steps.length) {
+      routinePanel.hidden = true;
+      picker.disabled = false;
+      return;
+    }
+    const step = routine.steps[routine.index];
+    routinePanel.hidden = false;
+    picker.disabled = true;
+    routineNextButton.disabled = false;
+    routineCancelButton.hidden = false;
+    routineStatus.textContent =
+      `${routine.name} - step ${routine.index + 1} of ${routine.steps.length}. ` +
+      `Measures ${step.startMeasure + 1}-${step.endMeasure + 1}; press Next when ready.`;
+    routineNextButton.textContent = routine.index === routine.steps.length - 1 ? 'Complete routine' : 'Next section';
+  }
+
+  async function logRoutineStep() {
+    const routine = app.activeRoutine;
+    if (!routine || !current) return;
+    const step = routine.steps[routine.index];
+    await app.logPractice({
+      type: 'routine',
+      title: current.title,
+      exerciseId: current.id,
+      bpm: step.bpm || current.tempoHint || null,
+      durationMs: Math.max(0, Date.now() - routineStepStartedAt),
+      stats: {
+        routineName: routine.name,
+        step: routine.index + 1,
+        stepCount: routine.steps.length,
+      },
+    });
+  }
+
+  async function advanceRoutine() {
+    const routine = app.activeRoutine;
+    if (!routine) return;
+    if (playing) stopPlayback();
+    const nextIndex = routine.index + 1;
+    const next = routine.steps[nextIndex];
+    const exercise = next && tabs.find(({ tab }) => tab.id === next.exerciseId)?.tab;
+    if (next && !exercise) {
+      routineStatus.textContent = 'The next exercise is missing. Cancel the routine or restore that tab from a backup.';
+      return;
+    }
+    try {
+      await logRoutineStep();
+    } catch (err) {
+      routineStatus.textContent = `Could not log this step: ${err.message}`;
+      console.error('routine step logging failed', err);
+      return;
+    }
+    if (routine.index === routine.steps.length - 1) {
+      app.activeRoutine = null;
+      trainer = null;
+      trainerRoutineId = null;
+      routineStatus.textContent = 'Routine complete. Your practice was logged.';
+      routinePanel.hidden = false;
+      picker.disabled = false;
+      routineNextButton.disabled = true;
+      routineCancelButton.hidden = true;
+      return;
+    }
+    routine.index = nextIndex;
+    selectTab(exercise);
+  }
+
+  function cancelRoutine() {
+    if (playing) stopPlayback();
+    app.activeRoutine = null;
+    trainer = null;
+    trainerRoutineId = null;
+    updateRoutinePanel();
+  }
+
   // ---- controls ----
   const playBtn = el('button', {
     type: 'button',
     text: 'Play',
     onClick: () => (playing ? stopPlayback() : startPlayback()),
   });
+
+  const routineStatus = el('p', { class: 'small', text: '' });
+  const routineNextButton = el('button', {
+    type: 'button', text: 'Next section', onClick: advanceRoutine,
+  });
+  const routineCancelButton = el('button', {
+    type: 'button', class: 'secondary', text: 'Cancel routine', onClick: cancelRoutine,
+  });
+  const routinePanel = el('div', { class: 'panel', hidden: true },
+    el('h3', { text: 'Routine in progress' }),
+    routineStatus,
+    el('div', { class: 'row' }, routineNextButton, routineCancelButton),
+  );
 
   const clickOn = true;
   let clickVol = 0.7, clickMuted = false, tabVol = 0.8, tabMuted = false;
@@ -305,11 +418,37 @@ export function mountTab(container, app) {
 
   const loopStart = numberInput(1, {
     min: 1, max: 999, label: 'Loop start measure',
-    onInput: (v) => { loop = { ...loop, startMeasure: v - 1 }; app.player.setLoop(loop); },
+    onInput: (v) => {
+      const startMeasure = v - 1;
+      loop = {
+        startMeasure,
+        endMeasure: Math.max(startMeasure, loop.endMeasure),
+      };
+      loopStart.value = loop.startMeasure + 1;
+      loopEnd.value = loop.endMeasure + 1;
+      const step = app.activeRoutine?.steps?.[app.activeRoutine.index];
+      if (step) step.startMeasure = loop.startMeasure;
+      if (step) step.endMeasure = loop.endMeasure;
+      app.player.setLoop(loop);
+      updateRoutinePanel();
+    },
   });
   const loopEnd = numberInput(1, {
     min: 1, max: 999, label: 'Loop end measure',
-    onInput: (v) => { loop = { ...loop, endMeasure: v - 1 }; app.player.setLoop(loop); },
+    onInput: (v) => {
+      const endMeasure = v - 1;
+      loop = {
+        startMeasure: Math.min(loop.startMeasure, endMeasure),
+        endMeasure,
+      };
+      loopStart.value = loop.startMeasure + 1;
+      loopEnd.value = loop.endMeasure + 1;
+      const step = app.activeRoutine?.steps?.[app.activeRoutine.index];
+      if (step) step.startMeasure = loop.startMeasure;
+      if (step) step.endMeasure = loop.endMeasure;
+      app.player.setLoop(loop);
+      updateRoutinePanel();
+    },
   });
 
   const playStringRow = el('div', { class: 'row' });
@@ -443,6 +582,7 @@ export function mountTab(container, app) {
       svgWrap,
       playStringRow,
     ),
+    routinePanel,
     el('div', { class: 'panel' },
       el('h3', { text: 'Mix' }),
       el('div', { class: 'row' }, clickVolume.root, tabVolume.root, clickMuteBtn, tabMuteBtn),

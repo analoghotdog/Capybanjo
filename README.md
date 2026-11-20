@@ -15,10 +15,12 @@ browser's IndexedDB only.
 - **Metronome**: 30-240 BPM, tap tempo, count-in (0/1/2 bars), quarter/eighth/
   triplet/sixteenth subdivisions, 4/4, 3/4 and 6/8 meters, click volume and
   mute, visual beat indicator, keyboard control (space, arrows, M).
+- **Practice**: quick-start guide, saved routines built from tab sections, and
+  focused measure-range drills with a configurable tempo ladder.
 - **Tab**: roll exercises from an editable library, SVG tab rendering with
   finger labels, playback with cursor, loop region, independent click and tab
-  volumes, per-string test tones, and a speed trainer that can judge clean
-  passes automatically with the microphone.
+  volumes, per-string test tones, a lightweight note editor, and a speed
+  trainer that can judge clean passes automatically with the microphone.
 - **Record**: microphone level meter, calibration (offset and jitter per device
   pair), assessment runs against the click (grid mode) or against an exercise
   (tab mode) with missed/extra note reporting, waveform with onset markers,
