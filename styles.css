@@ -1,74 +1,99 @@
-/* Banjo Practice — calm, uncluttered styling. No colour-only meaning:
-   states also carry text or shape. Supports dark scheme and reduced motion. */
+/* Banjo Practice — warm workshop palette with Garamond display type. */
 
 :root {
-  --bg: #fbfaf7;
-  --fg: #23282a;
-  --muted: #5c6668;
-  --line: #d8d5cd;
-  --panel: #ffffff;
-  --accent: #2f5d50;
-  --accent-soft: #e4ede9;
-  --warn: #8a5a00;
-  --warn-soft: #fdf1dc;
-  --danger: #8c2f2f;
+  --bg: #f4eddf;
+  --fg: #040f0f;
+  --muted: #686c63;
+  --line: #c8b59a;
+  --panel: #fffaf0;
+  --panel-warm: #e8d6b8;
+  --accent: #495a35;
+  --accent-strong: #273522;
+  --accent-soft: #dce2ce;
+  --gold: #ffbf69;
+  --wood: #b56742;
+  --toast: #da9356;
+  --camel: #c5a073;
+  --grey-olive: #8a817c;
+  --warn: #6b0f1a;
+  --warn-soft: #eed8bd;
+  --danger: #6b0f1a;
+  --shadow: 0 10px 28px rgba(39, 53, 34, 0.10);
   color-scheme: light dark;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1c2122;
-    --fg: #e8e6e1;
-    --muted: #a7b0b1;
-    --line: #3a4243;
-    --panel: #242a2b;
-    --accent: #7fb8a4;
-    --accent-soft: #2b3b36;
-    --warn: #e0b063;
-    --warn-soft: #3a3122;
-    --danger: #e08b8b;
+  :root:not([data-theme="light"]) {
+    --bg: #111711;
+    --fg: #f4eddf;
+    --muted: #c5bca9;
+    --line: #49533e;
+    --panel: #1b2418;
+    --panel-warm: #303a27;
+    --accent: #c8d29f;
+    --accent-strong: #495a35;
+    --accent-soft: #303a27;
+    --gold: #ffbf69;
+    --warn: #efb0a8;
+    --warn-soft: #4a3028;
+    --danger: #efb0a8;
+    --shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
   }
 }
 
-/* Explicit theme overrides (Settings: light / dark / system). */
 :root[data-theme="light"] {
-  --bg: #fbfaf7;
-  --fg: #23282a;
-  --muted: #5c6668;
-  --line: #d8d5cd;
-  --panel: #ffffff;
-  --accent: #2f5d50;
-  --accent-soft: #e4ede9;
-  --warn: #8a5a00;
-  --warn-soft: #fdf1dc;
-  --danger: #8c2f2f;
+  --bg: #f4eddf;
+  --fg: #040f0f;
+  --muted: #686c63;
+  --line: #c8b59a;
+  --panel: #fffaf0;
+  --panel-warm: #e8d6b8;
+  --accent: #495a35;
+  --accent-strong: #273522;
+  --accent-soft: #dce2ce;
+  --gold: #ffbf69;
+  --warn: #6b0f1a;
+  --warn-soft: #eed8bd;
+  --danger: #6b0f1a;
+  --shadow: 0 10px 28px rgba(39, 53, 34, 0.10);
 }
 
 :root[data-theme="dark"] {
-  --bg: #1c2122;
-  --fg: #e8e6e1;
-  --muted: #a7b0b1;
-  --line: #3a4243;
-  --panel: #242a2b;
-  --accent: #7fb8a4;
-  --accent-soft: #2b3b36;
-  --warn: #e0b063;
-  --warn-soft: #3a3122;
-  --danger: #e08b8b;
+  --bg: #111711;
+  --fg: #f4eddf;
+  --muted: #c5bca9;
+  --line: #49533e;
+  --panel: #1b2418;
+  --panel-warm: #303a27;
+  --accent: #c8d29f;
+  --accent-strong: #495a35;
+  --accent-soft: #303a27;
+  --gold: #ffbf69;
+  --warn: #efb0a8;
+  --warn-soft: #4a3028;
+  --danger: #efb0a8;
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
 }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: Garamond, "EB Garamond", Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  line-height: 1.55;
   background: var(--bg);
   color: var(--fg);
 }
 
-h1 { font-size: 1.15rem; margin: 0; font-weight: 650; }
-h2 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; }
-h3 { font-size: 0.95rem; margin: 1rem 0 0.4rem; }
+h1, h2, h3, h4 {
+  font-family: Garamond, "EB Garamond", Georgia, "Times New Roman", serif;
+  letter-spacing: 0.01em;
+}
+h1 { font-size: 1.5rem; margin: 0; font-weight: 700; }
+h2 { font-size: 1.75rem; margin: 0 0 0.75rem; font-weight: 700; }
+h3 { font-size: 1.25rem; margin: 0 0 0.7rem; font-weight: 700; }
+h4 { font-size: 1.1rem; margin: 0 0 0.45rem; }
 p { margin: 0.5rem 0; }
 
 .skip-link {
@@ -83,40 +108,45 @@ p { margin: 0.5rem 0; }
 .topbar {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 1rem;
-  padding: 0.7rem 1.2rem;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
+  align-items: center;
+  gap: 1.25rem;
+  padding: 0.65rem 1.25rem;
+  border-bottom: 4px solid var(--gold);
+  background: var(--accent-strong);
+  color: #fffaf0;
+  box-shadow: 0 4px 18px rgba(39, 53, 34, 0.16);
 }
 
 #nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem;
+  gap: 0.28rem;
+  margin-left: auto;
 }
 #nav a {
-  color: var(--fg);
+  color: #fffaf0;
   text-decoration: none;
-  padding: 0.3rem 0.65rem;
-  border-radius: 6px;
+  padding: 0.38rem 0.58rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  line-height: 1.2;
 }
-#nav a:hover { background: var(--accent-soft); }
+#nav a:hover { background: rgba(255, 191, 105, 0.16); color: var(--gold); }
 #nav a.active {
-  background: var(--accent);
-  color: var(--bg);
+  background: var(--gold);
+  color: var(--accent-strong);
   font-weight: 600;
 }
 
 #view {
-  max-width: 980px;
+  max-width: 1060px;
   margin: 0 auto;
-  padding: 1.2rem;
+  padding: 1.75rem 1.25rem;
   outline: none;
 }
 
 .foot {
-  max-width: 980px;
+  max-width: 1060px;
   margin: 2rem auto 1rem;
   padding: 0 1.2rem;
   color: var(--muted);
@@ -137,9 +167,10 @@ p { margin: 0.5rem 0; }
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 1rem;
-  margin: 0.8rem 0;
+  border-radius: 14px;
+  padding: 1.25rem;
+  margin: 0.9rem 0;
+  box-shadow: var(--shadow);
 }
 
 .row {
@@ -161,29 +192,38 @@ label { display: inline-flex; align-items: center; gap: 0.45rem; }
 .field > span { font-size: 0.85rem; color: var(--muted); }
 
 input[type="number"], input[type="text"], input[type="url"], select, textarea {
-  font: inherit;
+  font-family: Garamond, "EB Garamond", Georgia, "Times New Roman", serif;
   color: var(--fg);
-  background: var(--bg);
+  background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 0.35rem 0.5rem;
+  border-radius: 8px;
+  padding: 0.45rem 0.65rem;
 }
 input[type="range"] { accent-color: var(--accent); }
 textarea { width: 100%; min-height: 9rem; font-family: ui-monospace, Consolas, monospace; }
 
 button {
-  font: inherit;
-  color: var(--bg);
-  background: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: 7px;
-  padding: 0.42rem 0.95rem;
+  font-family: Garamond, "EB Garamond", Georgia, "Times New Roman", serif;
+  font-weight: 700;
+  color: #fffaf0;
+  background: var(--accent-strong);
+  border: 1px solid var(--accent-strong);
+  border-radius: 999px;
+  padding: 0.55rem 1.05rem;
   cursor: pointer;
+  box-shadow: 0 4px 10px rgba(39, 53, 34, 0.12);
+  transition: transform 120ms ease, background 120ms ease;
+}
+button:hover:not([disabled]) {
+  background: var(--accent);
+  border-color: var(--accent);
+  transform: translateY(-1px);
 }
 button.secondary {
   color: var(--fg);
-  background: transparent;
+  background: var(--panel);
   border: 1px solid var(--line);
+  box-shadow: none;
 }
 button.link {
   color: var(--accent);
@@ -213,16 +253,16 @@ select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   width: 0;
 }
 
-.beat-dots { display: flex; gap: 0.6rem; align-items: center; }
+.beat-dots { display: flex; gap: 0.75rem; align-items: center; margin: 1.1rem 0 0.5rem; }
 .beat-dot {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   border: 2px solid var(--accent);
   background: transparent;
 }
-.beat-dot.downbeat { width: 24px; height: 24px; }
-.beat-dot.on { background: var(--accent); }
+.beat-dot.downbeat { width: 28px; height: 28px; border-width: 3px; }
+.beat-dot.on { background: var(--gold); border-color: var(--gold); box-shadow: 0 0 0 5px rgba(255, 191, 105, 0.18); }
 .beat-dot.countin { border-style: dashed; }
 
 .notice {
@@ -245,12 +285,61 @@ table {
 }
 th, td {
   text-align: left;
-  padding: 0.35rem 0.6rem;
+  padding: 0.5rem 0.65rem;
   border-bottom: 1px solid var(--line);
 }
-th { font-weight: 600; color: var(--muted); font-size: 0.85rem; }
+th { font-weight: 700; color: var(--muted); font-size: 0.9rem; }
 
-.mono { font-family: ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums; }
+tbody tr:hover { background: rgba(197, 160, 115, 0.10); }
+
+.banner {
+  background: var(--warn-soft);
+  border-bottom-color: var(--toast);
+}
+
+.foot {
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
+  text-align: center;
+}
+
+input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.mono { font-family: Garamond, "EB Garamond", Georgia, "Times New Roman", ui-monospace, monospace; }
+
+@media (max-width: 720px) {
+  .topbar {
+    align-items: flex-start;
+    gap: 0.55rem;
+  }
+  #nav {
+    width: 100%;
+    margin-left: 0;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 0.15rem;
+  }
+  #nav a {
+    flex: 0 0 auto;
+  }
+  #view {
+    padding: 1.15rem 0.75rem;
+  }
+  h2 { font-size: 1.45rem; }
+  .panel {
+    padding: 1rem;
+    border-radius: 12px;
+  }
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mono { font-family: Garamond, "EB Garamond", Georgia, "Times New Roman", serif; font-variant-numeric: tabular-nums; }
 .muted { color: var(--muted); }
 .small { font-size: 0.85rem; }
 
