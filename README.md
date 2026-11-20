@@ -35,6 +35,9 @@ browser's IndexedDB only.
 - **Import**: ASCII tab paste/upload/drop, uncompressed MusicXML
   (`.musicxml`/`.xml`), and link import (raw GitHub and Gist links work; most
   tab sites do not allow fetching and the app shows a copy-paste fallback).
+  Guitar ASCII and MusicXML can be converted to banjo tuning with standard,
+  Drop D or DADGAD guitar tuning; unplayable-range notes are shifted by
+  octaves where possible, and conversion warnings appear in the preview.
   Confirmation screen with title, tuning, time signature, line order, rhythm
   step and ambiguous-fret resolution; saved-tab library with rename, notes and
   delete.

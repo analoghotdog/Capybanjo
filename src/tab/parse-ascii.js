@@ -23,8 +23,8 @@
 // - Spaced multi-digit frets ("1 0") are not supported; write "10".
 // - Bar lines '|' inside the tab are visual only (rhythm is unknown anyway)
 //   and never create note columns.
-// - A 6-line block (e.g. guitar tab) imports its top five lines as banjo
-//   strings 1..5 and ignores the lowest line, with a warning.
+// - A 6-line block imports its top five lines as banjo strings 1..5 by default.
+//   Guitar conversion can instead retain all six lines and remap their pitches.
 // - Runs of tab lines that cannot form a 5-line block are skipped, with a
 //   warning (or a hard error when no block is found at all).
 
@@ -42,14 +42,23 @@ function parseStringLine(line) {
 }
 
 /**
- * Split a run of consecutive string lines into systems. Greedy, top-down:
- * take 5 lines at a time; when exactly 6 lines remain, treat them as one
- * 6-line block (the caller drops its lowest line). Leftover lines that cannot
- * form a block are reported.
+ * Split a run of consecutive string lines into systems. Guitar conversion
+ * treats each six-line system as a complete source tab; normal imports retain
+ * the existing five-line behavior.
  */
-function chunkRun(lines, warnings) {
+function chunkRun(lines, warnings, stringCount) {
   const systems = [];
   let i = 0;
+  if (stringCount === 6) {
+    while (lines.length - i >= 6) {
+      systems.push({ lines: lines.slice(i, i + 6), six: false });
+      i += 6;
+    }
+    if (lines.length - i > 0) {
+      warnings.push(`Ignored ${lines.length - i} stray line(s) that do not form a complete 6-line guitar tab block.`);
+    }
+    return systems;
+  }
   while (lines.length - i >= 5) {
     const rem = lines.length - i;
     if (rem === 6) {
@@ -138,6 +147,12 @@ export function parseAsciiTab(text, options = {}) {
   if (typeof subdivision !== 'number' || !Number.isFinite(subdivision) || subdivision <= 0) {
     return { ok: false, error: 'options.subdivision must be a positive number.' };
   }
+  if (options.stringCount != null && options.stringCount !== 6) {
+    return { ok: false, error: 'options.stringCount must be 6 when importing a guitar tab.' };
+  }
+  if (options.stringCount === 6 && typeof options.noteTransform !== 'function') {
+    return { ok: false, error: 'A note transform is required when importing six-string guitar tabs.' };
+  }
 
   const stringMap = options.stringMap ?? null;
   if (stringMap != null) {
@@ -166,7 +181,7 @@ export function parseAsciiTab(text, options = {}) {
   if (run.length) runs.push(run);
 
   const systems = [];
-  for (const r of runs) systems.push(...chunkRun(r, warnings));
+  for (const r of runs) systems.push(...chunkRun(r, warnings, options.stringCount));
 
   if (systems.length === 0) {
     return {
@@ -176,16 +191,21 @@ export function parseAsciiTab(text, options = {}) {
   }
 
   const notes = [];
+  let shiftedNotes = 0;
+  let droppedNotes = 0;
   let colOffset = 0; // columns consumed by earlier systems
 
   for (const sys of systems) {
     let sysLines = sys.lines;
-    if (sys.six) {
+    if (options.stringCount !== 6 && sys.six) {
       warnings.push('A 6-line block was found; ignoring its lowest line and importing only banjo strings 1-5.');
       sysLines = sysLines.slice(0, 5);
     }
 
-    const mapping = mapStrings(sysLines, stringMap, warnings);
+    // Guitar tab lines run from string 1 (highest) to string 6 (lowest).
+    const mapping = options.stringCount === 6
+      ? sysLines.map((_, i) => i + 1)
+      : mapStrings(sysLines, stringMap, warnings);
 
     // Fret runs per line, keyed by the character index where the run starts.
     const cols = sysLines.map(({ content }) =>
@@ -203,16 +223,30 @@ export function parseAsciiTab(text, options = {}) {
       const string = mapping[li];
       if (string == null) continue;
       for (const d of cols[li]) {
-        notes.push({
+        const note = {
           string,
           fret: d.fret,
           startBeat: round6((colOffset + colRank.get(d.index)) / subdivision),
           durationBeats: round6(1 / subdivision),
           finger: null,
-        });
+        };
+        const mapped = options.noteTransform ? options.noteTransform(note) : note;
+        if (!mapped) {
+          droppedNotes++;
+          continue;
+        }
+        if (mapped.octaveShift) shiftedNotes++;
+        notes.push({ ...note, string: mapped.string, fret: mapped.fret });
       }
     }
     colOffset += positions.length;
+  }
+
+  if (shiftedNotes > 0) {
+    warnings.push(`Shifted ${shiftedNotes} guitar note(s) by octave(s) to fit the banjo range.`);
+  }
+  if (droppedNotes > 0) {
+    warnings.push(`Skipped ${droppedNotes} guitar note(s) that could not be mapped to an available banjo string within fret 22.`);
   }
 
   notes.sort((a, b) => a.startBeat - b.startBeat || a.string - b.string);

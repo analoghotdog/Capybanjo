@@ -8,6 +8,7 @@ import { parseAsciiTab } from '../tab/parse-ascii.js';
 import { parseMusicXML } from '../tab/parse-musicxml.js';
 import { renderTabSvg } from '../tab/render.js';
 import { TUNINGS, noteToMidi, resolveTuning, measureCount } from '../tab/model.js';
+import { createGuitarNoteMapper, GUITAR_TUNINGS } from '../tab/guitar-conversion.js';
 
 const TUNING_OPTIONS = [
   ['openG', TUNINGS.openG.name], ['doubleC', TUNINGS.doubleC.name],
@@ -15,6 +16,7 @@ const TUNING_OPTIONS = [
 ];
 const TIME_SIGNATURES = [['4,4', '4/4'], ['3,4', '3/4'], ['6,8', '6/8']];
 const RHYTHM_STEPS = [['1', 'Quarter notes (1 column per beat)'], ['2', 'Eighth notes (2 columns per beat)'], ['3', 'Triplets (3 per beat)'], ['4', 'Sixteenth notes (4 per beat)']];
+const GUITAR_TUNING_OPTIONS = Object.entries(GUITAR_TUNINGS).map(([key, tuning]) => [key, tuning.label]);
 
 export function mountImport(container, app) {
   const status = el('p', { class: 'muted small', text: '' });
@@ -22,6 +24,32 @@ export function mountImport(container, app) {
     text: 'Tabs are often copyrighted. Imported tabs are stored only in this browser and are for personal practice only.' });
   const pipeline = el('div'); // confirmation screen container
   const libraryWrap = el('div');
+  let reparseActive = null;
+  const sourceTypeSelect = select([
+    ['banjo', 'Banjo tab (import as-is)'],
+    ['guitar', 'Guitar tab (convert to banjo)'],
+  ], 'banjo', () => { if (reparseActive) reparseActive(); }, 'Source tab type');
+
+  function parseTab(format, rawText, parseOptions) {
+    const options = { ...parseOptions };
+    if (sourceTypeSelect.value === 'guitar') {
+      try {
+        options.noteTransform = createGuitarNoteMapper(
+          options.guitarTuning || 'standard',
+          options.tuning || 'openG',
+        ).mapNote;
+      } catch (err) {
+        return { ok: false, error: err.message };
+      }
+      if (format === 'ascii') options.stringCount = 6;
+    } else {
+      delete options.noteTransform;
+      delete options.stringCount;
+    }
+    return format === 'musicxml'
+      ? parseMusicXML(rawText, options)
+      : parseAsciiTab(rawText, options);
+  }
 
   // ---- one-time rights note ----
   (async () => {
@@ -41,6 +69,16 @@ export function mountImport(container, app) {
     const titleInput = el('input', { type: 'text', value: tab.title, 'aria-label': 'Tab title', size: 30 });
     const tuningSelect = select(TUNING_OPTIONS, typeof tab.tuning === 'string' ? tab.tuning : 'openG',
       (v) => { reparsed = true; parseOptions.tuning = v; reparse(); }, 'Tuning');
+    const guitarTuningSelect = select(
+      GUITAR_TUNING_OPTIONS,
+      parseOptions.guitarTuning || 'standard',
+      (v) => { parseOptions.guitarTuning = v; reparse(); },
+      'Guitar tuning',
+    );
+    const guitarTuningField = el('label', { class: 'field hidden' },
+      el('span', { text: 'Source guitar tuning' }),
+      guitarTuningSelect,
+    );
     const tsSelect = select(TIME_SIGNATURES, tab.timeSignature.join(','),
       (v) => { parseOptions.timeSignature = v.split(',').map(Number); reparse(); }, 'Time signature');
     const rhythmSelect = select(RHYTHM_STEPS, String(parseOptions.subdivision || 2),
@@ -56,6 +94,7 @@ export function mountImport(container, app) {
     const preview = el('div', { class: 'panel' });
     const ambiguousBox = el('div');
     let reparsed = false;
+    let saveBtn;
 
     function refreshWarnings() {
       warningsBox.innerHTML = '';
@@ -92,13 +131,16 @@ export function mountImport(container, app) {
     }
 
     function reparse() {
-      const result = format === 'musicxml'
-        ? parseMusicXML(rawText, parseOptions)
-        : parseAsciiTab(rawText, parseOptions);
+      const isGuitar = sourceTypeSelect.value === 'guitar';
+      guitarTuningField.classList.toggle('hidden', !isGuitar);
+      orderSelect.classList.toggle('hidden', isGuitar);
+      const result = parseTab(format, rawText, parseOptions);
       if (!result.ok) {
         status.textContent = result.error;
+        if (saveBtn) saveBtn.disabled = true;
         return;
       }
+      if (saveBtn) saveBtn.disabled = false;
       tab = result.tab;
       warnings = result.warnings || [];
       if (titleInput.value && titleInput.value !== 'Imported ASCII tab') tab.title = titleInput.value;
@@ -106,10 +148,13 @@ export function mountImport(container, app) {
       renderPreview();
       renderAmbiguous();
     }
+    reparseActive = reparse;
+    guitarTuningField.classList.toggle('hidden', sourceTypeSelect.value !== 'guitar');
+    orderSelect.classList.toggle('hidden', sourceTypeSelect.value === 'guitar');
 
     titleInput.addEventListener('input', () => { tab.title = titleInput.value; });
 
-    const saveBtn = el('button', {
+    saveBtn = el('button', {
       type: 'button', text: 'Save tab',
       onClick: async () => {
         const db = await app.getDb();
@@ -124,6 +169,7 @@ export function mountImport(container, app) {
         await db.put('tabs', saved);
         status.textContent = `Saved "${saved.title}" to the tab library.`;
         pipeline.innerHTML = '';
+        reparseActive = null;
         renderLibrary();
       },
     });
@@ -131,12 +177,14 @@ export function mountImport(container, app) {
     pipeline.append(
       el('h3', { text: 'Confirm import' }),
       el('div', { class: 'row' }, titleInput, tuningSelect, tsSelect),
-      format === 'ascii' ? el('div', { class: 'row' }, orderSelect, rhythmSelect) : null,
+      format === 'ascii'
+        ? el('div', { class: 'row' }, orderSelect, rhythmSelect, guitarTuningField)
+        : guitarTuningField,
       warningsBox,
       ambiguousBox,
       preview,
       el('div', { class: 'row' }, saveBtn,
-        el('button', { type: 'button', class: 'secondary', text: 'Cancel', onClick: () => { pipeline.innerHTML = ''; } })),
+        el('button', { type: 'button', class: 'secondary', text: 'Cancel', onClick: () => { pipeline.innerHTML = ''; reparseActive = null; } })),
     );
     refreshWarnings();
     renderPreview();
@@ -159,10 +207,8 @@ export function mountImport(container, app) {
   }
 
   function runParser(format, rawText, sourceLabel, baseOptions = {}) {
-    const parseOptions = { ...baseOptions };
-    const result = format === 'musicxml'
-      ? parseMusicXML(rawText, parseOptions)
-      : parseAsciiTab(rawText, parseOptions);
+    const parseOptions = { ...baseOptions, guitarTuning: 'standard' };
+    const result = parseTab(format, rawText, parseOptions);
     if (!result.ok) {
       status.textContent = result.error;
       return;
@@ -310,7 +356,11 @@ export function mountImport(container, app) {
   container.append(
     el('h2', { text: 'Import tabs' }),
     rightsNote,
-    el('div', { class: 'panel' }, tabRow, pastePane, filePane, linkPane, status),
+    el('div', { class: 'panel' },
+      el('div', { class: 'row' },
+        el('label', { class: 'field' }, el('span', { text: 'Source tab type' }), sourceTypeSelect)),
+      el('p', { class: 'small muted', text: 'For ASCII guitar tabs, use six lines ordered from the highest string to the lowest. Guitar notes are remapped to playable banjo strings; out-of-range notes may be shifted by octaves.' }),
+      tabRow, pastePane, filePane, linkPane, status),
     pipeline,
     libraryWrap,
   );

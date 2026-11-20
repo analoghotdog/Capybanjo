@@ -103,7 +103,7 @@ function tokenize(xml) {
  * Stream the tokens into parsed notes and score metadata.
  * Returns an internal state object; see parseMusicXML for the output shape.
  */
-function parseScore(xml, openMidis) {
+function parseScore(xml, openMidis, noteTransform) {
   const state = {
     openMidis,
     stack: [],
@@ -129,6 +129,8 @@ function parseScore(xml, openMidis) {
     droppedSixth: 0,
     droppedBelow: 0,
     droppedNoPitch: 0,
+    conversionDropped: 0,
+    conversionShifted: 0,
     backupDur: null,
     forwardDur: null,
     sawRoot: false,
@@ -172,7 +174,25 @@ function parseScore(xml, openMidis) {
     }
 
     const out = { startBeat: onset, durationBeats: dur, finger: null };
-    if (n.string != null && n.fret != null && Number.isInteger(n.string) && Number.isInteger(n.fret)) {
+    if (noteTransform) {
+      const step = n.step != null ? String(n.step).toUpperCase() : null;
+      const midi = step != null && STEP_OFFSETS[step] != null && n.octave != null
+        ? (n.octave + 1) * 12 + STEP_OFFSETS[step] + (n.alter || 0)
+        : null;
+      const mapped = noteTransform({
+        midi,
+        string: n.string,
+        fret: n.fret,
+        startBeat: out.startBeat,
+      });
+      if (!mapped) {
+        state.conversionDropped++;
+        return;
+      }
+      out.string = mapped.string;
+      out.fret = mapped.fret;
+      if (mapped.octaveShift) state.conversionShifted++;
+    } else if (n.string != null && n.fret != null && Number.isInteger(n.string) && Number.isInteger(n.fret)) {
       if (n.string >= 1 && n.string <= 5 && n.fret >= 0) {
         out.string = n.string;
         out.fret = n.fret;
@@ -402,7 +422,9 @@ function parseScore(xml, openMidis) {
  *
  * @param {string} xmlText
  * @param {object} [options] same option names as parse-ascii:
- *   title / tuning / timeSignature (option values override the file).
+ *   title / tuning / timeSignature (option values override the file);
+ *   noteTransform optionally remaps each note using its pitch and source
+ *   technical string/fret before it is added to the output tab.
  * @returns {{ok:true, tab:object, warnings:string[]}|{ok:false, error:string}}
  */
 export function parseMusicXML(xmlText, options = {}) {
@@ -428,7 +450,10 @@ export function parseMusicXML(xmlText, options = {}) {
     return { ok: false, error: `Invalid tuning: ${e.message}` };
   }
 
-  const state = parseScore(xml, openMidis);
+  if (options.noteTransform != null && typeof options.noteTransform !== 'function') {
+    return { ok: false, error: 'options.noteTransform must be a function.' };
+  }
+  const state = parseScore(xml, openMidis, options.noteTransform);
 
   if (!state.sawRoot) {
     return {
@@ -460,6 +485,12 @@ export function parseMusicXML(xmlText, options = {}) {
   }
   if (state.droppedNoPitch > 0) {
     warnings.push(`Ignored ${state.droppedNoPitch} note(s) with no usable <pitch> or <technical> string/fret.`);
+  }
+  if (state.conversionShifted > 0) {
+    warnings.push(`Shifted ${state.conversionShifted} guitar note(s) by octave(s) to fit the banjo range.`);
+  }
+  if (state.conversionDropped > 0) {
+    warnings.push(`Skipped ${state.conversionDropped} guitar note(s) that could not be mapped to an available banjo string within fret 22.`);
   }
   if (state.ambiguousCount > 0) {
     warnings.push(
