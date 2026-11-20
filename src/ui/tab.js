@@ -339,6 +339,28 @@ export function mountTab(container, app) {
   const targetBpmInput = numberInput(80, { min: 30, max: 240, label: 'Target BPM' });
   const stepInput = numberInput(5, { min: 1, max: 50, label: 'Step' });
   const requiredCleanInput = numberInput(2, { min: 1, max: 10, label: 'Clean passes per step' });
+  const trainerSettings = el('div', { class: 'row' },
+    el('label', { class: 'field' },
+      el('span', { text: 'Start BPM' }),
+      startBpmInput,
+      el('span', { class: 'muted small', text: 'Tempo to begin practicing at.' }),
+    ),
+    el('label', { class: 'field' },
+      el('span', { text: 'Target BPM' }),
+      targetBpmInput,
+      el('span', { class: 'muted small', text: 'Goal tempo; the trainer finishes here.' }),
+    ),
+    el('label', { class: 'field' },
+      el('span', { text: 'Step (BPM)' }),
+      stepInput,
+      el('span', { class: 'muted small', text: 'Tempo increase after enough clean passes.' }),
+    ),
+    el('label', { class: 'field' },
+      el('span', { text: 'Clean passes per step' }),
+      requiredCleanInput,
+      el('span', { class: 'muted small', text: 'Consecutive clean loops needed to increase tempo.' }),
+    ),
+  );
   const assessmentCheckbox = el('input', {
     type: 'checkbox', id: 'assessment-on',
     onChange: (e) => {
@@ -395,7 +417,7 @@ export function mountTab(container, app) {
 
   trainerPanel.append(
     el('h3', { text: 'Speed trainer' }),
-    el('div', { class: 'row' }, startBpmInput, targetBpmInput, stepInput, requiredCleanInput),
+    trainerSettings,
     el('div', { class: 'row' },
       el('button', { type: 'button', text: 'Configure / restart', onClick: buildTrainer }),
       manualPassBtn, manualFailBtn,
