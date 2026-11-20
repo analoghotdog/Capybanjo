@@ -16,7 +16,8 @@ browser's IndexedDB only.
   triplet/sixteenth subdivisions, 4/4, 3/4 and 6/8 meters, click volume and
   mute, visual beat indicator, keyboard control (space, arrows, M).
 - **Practice**: quick-start guide, saved routines built from tab sections, and
-  focused measure-range drills with a configurable tempo ladder.
+  focused measure-range drills with a configurable tempo ladder. Manage rolls
+  here too: edit built-in patterns or add your own.
 - **Tab**: roll exercises from an editable library, SVG tab rendering with
   finger labels, playback with cursor, loop region, independent click and tab
   volumes, per-string test tones, a lightweight note editor, and a speed
@@ -87,11 +88,14 @@ Old caches are deleted automatically on activation.
 
 ## Editing the roll library
 
-Rolls are data, not code: edit `src/tab/library/rolls.json`. Each roll has a
-pattern of strings (1-5) and fingers (T/I/M), a measure count, tuning and time
-signature. `src/tab/library.js` expands the pattern into eighth notes. Teachers
-vary slightly in these patterns — check them against your own teaching
-material and adjust the JSON. The same applies to the chord shapes in
+Use **Practice → Roll library** to edit the string and picking finger for each
+step, change a roll's name, measure count or starting tempo, and add or delete
+your own rolls. Changes are stored in this browser's settings, included in
+settings backups, and appear in the Tab and Record exercise lists. Built-in
+rolls can be reset to their packaged patterns. Packaged defaults remain in
+`src/tab/library/rolls.json`; each pattern step is an open-string eighth note.
+Teachers vary slightly in these patterns, so check them against your own
+teaching material. The same applies to the chord shapes in
 `src/features/chords.js`.
 
 ## Backing up your data

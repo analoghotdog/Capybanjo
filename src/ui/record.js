@@ -261,7 +261,7 @@ export function mountRecord(container, app) {
   const exerciseField = el('label', { class: 'field hidden' }, el('span', { text: 'Exercise' }), exerciseSelect);
 
   async function loadExercises() {
-    exercises = await loadRolls();
+    exercises = await loadRolls(app.settings);
     const db = await app.getDb();
     exercises = exercises.concat(await db.getAll('tabs'));
     exerciseSelect.innerHTML = '';

@@ -41,7 +41,7 @@ export function mountTab(container, app) {
   });
 
   async function refreshPicker() {
-    const rolls = await loadRolls();
+    const rolls = await loadRolls(app.settings);
     const db = await app.getDb();
     const imported = await db.getAll('tabs');
     tabs = [
