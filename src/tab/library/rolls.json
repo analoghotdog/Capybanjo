@@ -1,14 +1,17 @@
 {
-  "schemaVersion": 1,
-  "note": "Roll patterns are editable data, not code. Teachers vary slightly; the owner should confirm these against their own teaching material. Strings are 1..5 (1 = D4 top line in the tab renderer), fingers T/I/M. All notes are open-string eighth notes.",
+  "schemaVersion": 2,
+  "note": "Roll patterns are editable data, not code. Teachers vary slightly; the owner should confirm these against their own teaching material. Strings are 1..5 (1 = D4 top line in the tab renderer), fingers T/I/M. All notes are open-string eighth notes unless 'frets' gives a per-step fret (melodic/choker patterns). Optional fields: difficulty ('beginner'|'intermediate'|'advanced'), category, description.",
   "rolls": [
     {
       "key": "forward",
       "title": "Forward roll",
+      "category": "roll",
+      "difficulty": "beginner",
       "tuning": "openG",
       "timeSignature": [4, 4],
       "tempoHint": 60,
       "measures": 4,
+      "description": "The foundational Scruggs pattern: thumb on the low strings, index and middle alternating on the two high strings. The workhorse of most bluegrass breaks.",
       "pattern": {
         "strings": [3, 2, 1, 3, 2, 1, 3, 2],
         "fingers": ["T", "I", "M", "T", "I", "M", "T", "I"]
@@ -17,10 +20,13 @@
     {
       "key": "backward",
       "title": "Backward roll",
+      "category": "roll",
+      "difficulty": "beginner",
       "tuning": "openG",
       "timeSignature": [4, 4],
       "tempoHint": 60,
       "measures": 4,
+      "description": "The mirror of the forward roll, starting on the first string. Useful for reversing direction mid-break and ending phrases on the thumb.",
       "pattern": {
         "strings": [1, 2, 3, 1, 2, 3, 1, 2],
         "fingers": ["M", "I", "T", "M", "I", "T", "M", "I"]
@@ -29,10 +35,13 @@
     {
       "key": "forward-reverse",
       "title": "Forward-reverse roll",
+      "category": "roll",
+      "difficulty": "intermediate",
       "tuning": "openG",
       "timeSignature": [4, 4],
       "tempoHint": 60,
       "measures": 4,
+      "description": "Rolls up over the fifth string and back down. The change of direction trips up beginners; practice slowly until the turnaround is even.",
       "pattern": {
         "strings": [3, 2, 1, 5, 1, 2, 3, 1],
         "fingers": ["T", "I", "M", "T", "M", "I", "T", "M"]
@@ -41,13 +50,140 @@
     {
       "key": "alternating-thumb",
       "title": "Alternating-thumb roll",
+      "category": "roll",
+      "difficulty": "intermediate",
       "tuning": "openG",
       "timeSignature": [4, 4],
       "tempoHint": 60,
       "measures": 4,
+      "description": "The thumb alternates between the third and fifth strings, keeping the melody on the downbeats. Common when the melody sits on the low strings.",
       "pattern": {
         "strings": [3, 2, 5, 1, 3, 2, 5, 1],
         "fingers": ["T", "I", "T", "M", "T", "I", "T", "M"]
+      }
+    },
+    {
+      "key": "up-down-the-neck",
+      "title": "Up-down-the-neck roll",
+      "category": "roll",
+      "difficulty": "intermediate",
+      "tuning": "openG",
+      "timeSignature": [4, 4],
+      "tempoHint": 60,
+      "measures": 4,
+      "description": "A scalar melodic run that climbs the first three strings and returns. Not a looping roll so much as an eight-note lick; keep all eight notes even.",
+      "pattern": {
+        "strings": [1, 2, 3, 1, 2, 3, 1, 2],
+        "fingers": ["M", "I", "T", "M", "I", "T", "M", "I"]
+      }
+    },
+    {
+      "key": "flank-pick",
+      "title": "Flank pick",
+      "category": "lick",
+      "difficulty": "intermediate",
+      "tuning": "openG",
+      "timeSignature": [4, 4],
+      "tempoHint": 60,
+      "measures": 4,
+      "description": "Three notes played with the same finger (index here) followed by a thumb note, repeated. Great for syncopated melodic phrasing; try the version with the middle finger too.",
+      "pattern": {
+        "strings": [1, 1, 1, 3, 2, 2, 2, 3],
+        "fingers": ["I", "I", "I", "T", "I", "I", "I", "T"]
+      }
+    },
+    {
+      "key": "kimball-roll",
+      "title": "Kimball roll",
+      "category": "lick",
+      "difficulty": "advanced",
+      "tuning": "openG",
+      "timeSignature": [4, 4],
+      "tempoHint": 50,
+      "measures": 4,
+      "description": "Don Kimball's signature lick: a quick ascending burst on the high strings landing on a low thumb note. The stretch from the high fret back to the open fifth string is the hard part.",
+      "pattern": {
+        "strings": [1, 1, 1, 1, 2, 3, 4, 5],
+        "fingers": ["M", "I", "M", "I", "M", "I", "T", "T"],
+        "frets": [7, 5, 3, 0, 3, 0, 0, 0]
+      }
+    },
+    {
+      "key": "choked-third",
+      "title": "Choked third (bend)",
+      "category": "technique",
+      "difficulty": "intermediate",
+      "tuning": "openG",
+      "timeSignature": [4, 4],
+      "tempoHint": 50,
+      "measures": 4,
+      "description": "Bend the second string at the fourth fret up one whole tone (to the third-string pitch) while the roll continues underneath. Listen for the bent note matching the open first string's neighbor.",
+      "pattern": {
+        "strings": [3, 2, 1, 3, 2, 1, 3, 2],
+        "fingers": ["T", "I", "M", "T", "I", "M", "T", "I"],
+        "frets": [0, 0, 0, 0, 4, 0, 0, 0]
+      }
+    },
+    {
+      "key": "choked-fifth",
+      "title": "Choked fifth (bend)",
+      "category": "technique",
+      "difficulty": "advanced",
+      "tuning": "openG",
+      "timeSignature": [4, 4],
+      "tempoHint": 50,
+      "measures": 4,
+      "description": "A whole-tone bend on the short fifth string at the second fret, resolving back to open. Fifth-string bends need a firm grip and careful intonation check against the open third string.",
+      "pattern": {
+        "strings": [3, 2, 1, 5, 1, 2, 3, 5],
+        "fingers": ["T", "I", "M", "T", "M", "I", "T", "T"],
+        "frets": [0, 0, 0, 2, 0, 0, 0, 2]
+      }
+    },
+    {
+      "key": "slurred-ascent",
+      "title": "Slurred ascent",
+      "category": "technique",
+      "difficulty": "beginner",
+      "tuning": "openG",
+      "timeSignature": [4, 4],
+      "tempoHint": 60,
+      "measures": 4,
+      "description": "A slide from the second to the fourth fret on the second string inside a forward roll. One pick per pair of notes; let the slide carry the second note.",
+      "pattern": {
+        "strings": [3, 2, 1, 3, 2, 1, 3, 2],
+        "fingers": ["T", "I", "M", "T", "I", "M", "T", "I"],
+        "frets": [0, 2, 0, 0, 4, 0, 0, 0]
+      }
+    },
+    {
+      "key": "double-C-forward",
+      "title": "Forward roll (Double C)",
+      "category": "roll",
+      "difficulty": "beginner",
+      "tuning": "doubleC",
+      "timeSignature": [4, 4],
+      "tempoHint": 60,
+      "measures": 4,
+      "description": "The same forward-roll fingering in Double C tuning. Old-timey clawhammer-style rolls feel different here; keep the thumb steady on the low C.",
+      "pattern": {
+        "strings": [3, 2, 1, 3, 2, 1, 3, 2],
+        "fingers": ["T", "I", "M", "T", "I", "M", "T", "I"]
+      }
+    },
+    {
+      "key": "sawmill-backward",
+      "title": "Backward roll (Sawmill)",
+      "category": "roll",
+      "difficulty": "intermediate",
+      "tuning": "sawmill",
+      "timeSignature": [4, 4],
+      "tempoHint": 60,
+      "measures": 4,
+      "description": "The backward roll in Sawmill / G-modal tuning, where the lowered second string changes every chord shape you know.",
+      "pattern": {
+        "strings": [1, 2, 3, 1, 2, 3, 1, 2],
+        "fingers": ["M", "I", "T", "M", "I", "T", "M", "I"]
       }
     }
   ]

@@ -4,11 +4,13 @@ import {
   expandRoll,
   loadRollDefinitions,
   resetRollDefinition,
+  rollTagline,
   saveRollDefinition,
 } from '../tab/library.js';
 import { measureCount } from '../tab/model.js';
 
 const ROUTINES_KEY = 'practiceRoutines';
+const ROLL_DIFFICULTY_ORDER = ['beginner', 'intermediate', 'advanced'];
 
 export function mountPractice(container, app) {
   let exercises = [];
@@ -26,7 +28,10 @@ export function mountPractice(container, app) {
   const routineList = el('div');
   const builderList = el('div');
 
-  const exerciseOptions = () => exercises.map(({ tab }) => [tab.id, tab.title]);
+  const exerciseOptions = () => exercises.map(({ tab, origin, roll }) => [
+    tab.id,
+    origin === 'roll' ? `${tab.title} (${rollTagline(roll)})` : tab.title,
+  ]);
   const focusExercise = select([], '', () => updateFocusHint(), 'Exercise for focused drill');
   const routineExercise = select([], '', () => updateRoutineHint(), 'Exercise to add');
   const focusHint = el('p', { class: 'muted small', text: '' });
@@ -43,6 +48,10 @@ export function mountPractice(container, app) {
   const rollTitle = el('input', { type: 'text', 'aria-label': 'Roll name', maxLength: 80 });
   const rollMeasures = numberInput(4, { min: 1, max: 32, label: 'Measures' });
   const rollTempo = numberInput(60, { min: 30, max: 240, label: 'Starting BPM' });
+  const rollDifficulty = select([['beginner', 'Beginner'], ['intermediate', 'Intermediate'], ['advanced', 'Advanced']],
+    'beginner', null, 'Difficulty');
+  const rollCategory = select([['roll', 'Roll'], ['lick', 'Lick'], ['technique', 'Technique']],
+    'roll', null, 'Category');
 
   function renderRollPattern() {
     rollPattern.innerHTML = '';
@@ -50,6 +59,7 @@ export function mountPractice(container, app) {
     table.append(el('tr', {},
       el('th', { text: 'Step' }),
       el('th', { text: 'String' }),
+      el('th', { text: 'Fret' }),
       el('th', { text: 'Finger' }),
     ));
     rollDraft.pattern.strings.forEach((string, index) => {
@@ -61,6 +71,10 @@ export function mountPractice(container, app) {
           (value) => { rollDraft.pattern.strings[index] = Number(value); },
           `Step ${index + 1} string`,
         )),
+        el('td', {}, numberInput(rollDraft.pattern.frets[index], {
+          min: 0, max: 24, label: `Step ${index + 1} fret`,
+          onInput: (value) => { rollDraft.pattern.frets[index] = value; },
+        })),
         el('td', {}, select(
           [['T', 'Thumb'], ['I', 'Index'], ['M', 'Middle']],
           rollDraft.pattern.fingers[index],
@@ -80,6 +94,7 @@ export function mountPractice(container, app) {
       pattern: {
         strings: [...definition.pattern.strings],
         fingers: [...definition.pattern.fingers],
+        frets: [...(definition.pattern.frets || definition.pattern.strings.map(() => 0))],
       },
     } : {
       key: '',
@@ -88,14 +103,19 @@ export function mountPractice(container, app) {
       timeSignature: [4, 4],
       tempoHint: 60,
       measures: 4,
+      difficulty: 'beginner',
+      category: 'roll',
       pattern: {
         strings: [3, 2, 1, 3, 2, 1, 3, 2],
         fingers: ['T', 'I', 'M', 'T', 'I', 'M', 'T', 'I'],
+        frets: [0, 0, 0, 0, 0, 0, 0, 0],
       },
     };
     rollTitle.value = rollDraft.title;
     rollMeasures.value = rollDraft.measures;
     rollTempo.value = rollDraft.tempoHint;
+    rollDifficulty.value = rollDraft.difficulty || 'beginner';
+    rollCategory.value = rollDraft.category || 'roll';
     rollStatus.textContent = '';
     renderRollPattern();
     rollEditor.hidden = false;
@@ -144,10 +164,17 @@ export function mountPractice(container, app) {
       }
       rollList.append(el('div', { class: 'panel' },
         el('h4', { text: roll.title }),
-        el('p', { class: 'muted small', text: `${roll.builtIn ? 'Built-in' : 'My roll'} · ${roll.pattern.strings.length} eighth-note steps · ${roll.measures} measures` }),
+        el('p', { class: 'muted small', text: `${rollTagline(roll)} · ${roll.builtIn ? 'Built-in' : 'My roll'} · ${roll.pattern.strings.length} eighth-note steps · ${roll.measures} measures` }),
+        roll.description ? el('p', { class: 'small', text: roll.description }) : null,
         el('div', { class: 'row' }, actions),
       ));
     }
+    const counts = {};
+    for (const roll of rollDefinitions) counts[roll.difficulty || 'beginner'] = (counts[roll.difficulty || 'beginner'] || 0) + 1;
+    rollList.append(el('p', {
+      class: 'muted small',
+      text: `${rollDefinitions.length} rolls: ${ROLL_DIFFICULTY_ORDER.map((d) => `${counts[d] || 0} ${d}`).join(', ')}.`,
+    }));
   }
 
   const saveRollButton = el('button', {
@@ -162,6 +189,8 @@ export function mountPractice(container, app) {
         title,
         measures: rollMeasures.valueAsNumber,
         tempoHint: rollTempo.valueAsNumber,
+        difficulty: rollDifficulty.value,
+        category: rollCategory.value,
       };
       try {
         await saveRollDefinition(app.settings, roll);
@@ -182,8 +211,12 @@ export function mountPractice(container, app) {
   rollEditor.append(
     el('h4', { text: 'Roll details' }),
     settingField('Roll name', rollTitle),
+    el('div', { class: 'row' },
+      settingField('Category', rollCategory),
+      settingField('Difficulty', rollDifficulty),
+    ),
     el('div', { class: 'row' }, settingField('Measures', rollMeasures), settingField('Starting BPM', rollTempo)),
-    el('p', { class: 'muted small', text: 'Each step plays an open-string eighth note. Choose its string and picking finger.' }),
+    el('p', { class: 'muted small', text: 'Each step plays an eighth note. Choose its string, fret (0 = open string) and picking finger.' }),
     rollPattern,
     el('div', { class: 'row' }, saveRollButton, cancelRollEditButton),
   );
@@ -465,7 +498,7 @@ export function mountPractice(container, app) {
       const db = await app.getDb();
       const imported = await db.getAll('tabs');
       exercises = [
-        ...rollDefinitions.map((roll) => ({ tab: expandRoll(roll), origin: 'roll' })),
+        ...rollDefinitions.map((roll) => ({ tab: expandRoll(roll), origin: 'roll', roll })),
         ...imported.map((tab) => ({ tab, origin: 'import' })),
       ];
       const options = exerciseOptions();

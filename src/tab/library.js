@@ -1,9 +1,13 @@
 // The packaged defaults live in library/rolls.json; browser edits are stored
 // in settings and expanded into the same Tab objects for every exercise view.
 
-import { beatsPerMeasure, validateTab } from './model.js';
+import { beatsPerMeasure, TUNINGS, validateTab } from './model.js';
 
 export const ROLL_LIBRARY_SETTING = 'rollLibrary';
+
+export const ROLL_DIFFICULTIES = ['beginner', 'intermediate', 'advanced'];
+export const ROLL_CATEGORIES = ['roll', 'lick', 'technique'];
+const CATEGORY_LABELS = { roll: 'Roll', lick: 'Lick', technique: 'Technique' };
 
 async function readJson(url) {
   let text;
@@ -19,7 +23,7 @@ async function readJson(url) {
 }
 
 function copyRoll(roll) {
-  return {
+  const copy = {
     key: roll.key,
     title: roll.title,
     tuning: roll.tuning,
@@ -31,6 +35,23 @@ function copyRoll(roll) {
       fingers: [...roll.pattern.fingers],
     },
   };
+  if (Array.isArray(roll.pattern.frets)) copy.pattern.frets = [...roll.pattern.frets];
+  if (typeof roll.difficulty === 'string' && roll.difficulty) copy.difficulty = roll.difficulty;
+  if (typeof roll.category === 'string' && roll.category) copy.category = roll.category;
+  if (typeof roll.description === 'string' && roll.description.trim()) copy.description = roll.description.trim();
+  return copy;
+}
+
+/** Short human summary for exercise lists, e.g. "Roll · Intermediate · Double C". */
+export function rollTagline(roll) {
+  const parts = [];
+  parts.push(CATEGORY_LABELS[roll.category] || 'Roll');
+  if (roll.difficulty) parts.push(roll.difficulty[0].toUpperCase() + roll.difficulty.slice(1));
+  const tuning = TUNINGS[roll.tuning];
+  if (tuning && tuning.key !== 'openG') {
+    parts.push(tuning.name.replace(/\s*\(.*\)$/, '')); // "Double C (gCGCD)" -> "Double C"
+  }
+  return parts.join(' · ');
 }
 
 export function validateRollDefinition(roll) {
@@ -65,6 +86,23 @@ export function validateRollDefinition(roll) {
     if (pattern.fingers.some((finger) => !['T', 'I', 'M'].includes(finger))) {
       errors.push('pattern fingers must be T, I or M');
     }
+    if (pattern.frets !== undefined) {
+      if (!Array.isArray(pattern.frets) || pattern.frets.length !== pattern.strings.length) {
+        errors.push('pattern frets must match the number of steps');
+      } else if (pattern.frets.some((fret) => !Number.isInteger(fret) || fret < 0 || fret > 24)) {
+        errors.push('pattern frets must be integers from 0 to 24');
+      }
+    }
+  }
+  if (roll.difficulty !== undefined && !ROLL_DIFFICULTIES.includes(roll.difficulty)) {
+    errors.push(`difficulty must be one of: ${ROLL_DIFFICULTIES.join(', ')}`);
+  }
+  if (roll.category !== undefined && !ROLL_CATEGORIES.includes(roll.category)) {
+    errors.push(`category must be one of: ${ROLL_CATEGORIES.join(', ')}`);
+  }
+  if (roll.description !== undefined
+    && (typeof roll.description !== 'string' || roll.description.length > 300)) {
+    errors.push('description must be a string of at most 300 characters');
   }
   if (errors.length) return { ok: false, errors };
   const tabValidation = validateTab(expandRoll(roll));
@@ -142,10 +180,11 @@ export async function resetRollDefinition(settings, key) {
   await settings.set(ROLL_LIBRARY_SETTING, saved.filter((item) => item.key !== key));
 }
 
-/** Expand one roll pattern into a full Tab of open-string eighth notes. */
+/** Expand one roll pattern into a full Tab of eighth notes (open strings unless the pattern gives frets). */
 export function expandRoll(roll) {
   const strings = roll.pattern.strings;
   const fingers = roll.pattern.fingers;
+  const frets = roll.pattern.frets || null;
   const step = 0.5; // eighth notes
   const beats = beatsPerMeasure(roll.timeSignature);
   const notes = [];
@@ -153,7 +192,7 @@ export function expandRoll(roll) {
     for (let i = 0; i < strings.length; i++) {
       notes.push({
         string: strings[i],
-        fret: 0,
+        fret: frets ? frets[i] : 0,
         startBeat: m * beats + i * step,
         durationBeats: step,
         finger: fingers[i] ?? null,
